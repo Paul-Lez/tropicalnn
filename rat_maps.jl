@@ -6,16 +6,47 @@ using Oscar
 #using StatsBase
 using Combinatorics
 
-struct TropicalPuissieuxPoly
-    coeff::Vector
+struct TropicalPuiseuxPoly
+    coeff::Dict
     exp::Vector
 end 
 
-function eachindex(f::TropicalPuissieuxPoly)
-    return Base.eachindex(f.coeff)
+struct TropicalPuiseuxRational
+    num::TropicalPuiseuxPoly
+    den::TropicalPuiseuxPoly
 end 
 
-function n_var(f::TropicalPuissieuxPoly)
+# TODO: implement lexicographic ordering of terms
+
+function TropicalPuiseuxPoly(coeff::Dict, exp::Vector, sorted)
+    # first we need to order everything lexicographically
+    if !sorted 
+        exp = sort(exp)
+    end 
+    return TropicalPuiseuxPoly(coeff, exp)
+end 
+
+function TropicalPuiseuxPoly(coeff::Vector, exp::Vector, sorted=false)
+    if !sorted 
+        I = sortperm(exp)
+        exp = exp[I]
+        coeff = coeff[I]
+    end 
+    return TropicalPuiseuxPoly(Dict(zip(exp, coeff)), exp)
+end 
+
+
+function TropicalPuiseuxPoly_zero(n, f)
+    exp = [Base.zeros(n)]
+    coeff = Dict(Base.zeros(n) => zero(f.coeff[f.exp[1]]))
+    return TropicalPuiseuxPoly(coeff, exp)
+end 
+
+function eachindex(f::TropicalPuiseuxPoly)
+    return Base.eachindex(f.exp)
+end 
+
+function Oscar.nvars(f::TropicalPuiseuxPoly)
     if !is_empty(f.coeff)
         return length(f.exp[1])
     else 
@@ -23,148 +54,146 @@ function n_var(f::TropicalPuissieuxPoly)
     end 
 end 
 
-function polyhedron(f::TropicalPuissieuxPoly, i)
-    A = Base.reduce(vcat, [f.exp[j] - f.exp[i] for j in eachindex(f)]')
-    b = [f.coeff[i] - f.coeff[j] for j in eachindex(f)]
-    return Oscar.polyhedron(A, b)
-end 
-
-# return a list of the linear regions of f and a list of the terms of f that are never attained
-function enum_linear_regions(f::TropicalPuissieuxPoly)
-    linear_regions = []
-    for i in eachindex(f)
-        poly = polyhedron(f, i)
-        push!(linear_regions, (poly, Oscar.is_feasible(poly)))
-    end 
-    return linear_regions
-end 
-
-#implement ignoring functionality
-function check_linear_repetitions(f::TropicalPuissieuxPoly, g::TropicalPuissieuxPoly)
-    lin_f = enum_linear_regions(f)
-    #println(lin_f)
-    lin_g = enum_linear_regions(g)
-    linear_map = Dict()
-    for i in eachindex(f)
-        for j in eachindex(g)
-            if lin_f[i][2] && lin_g[j][2]
-                poly = Oscar.intersect(lin_f[i][1], lin_g[j][1])
-                #println(Oscar.dim(poly), " here")
-                #println(Oscar.is_feasible(poly))
-                if Oscar.is_feasible(poly) && Oscar.dim(poly) == n_var(f)
-                    #println("here")
-                    linear_map[(i, j)] = [f.coeff[i] - g.coeff[j], f.exp[i] - g.exp[j]]
+function Base.:+(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
+    """
+    Takes two TropicalPuiseuxPoly whose exponents are lexicographically ordered and outputs the sum with 
+    lexicoraphically ordered exponents
+    """
+    lf = length(f.coeff)
+    lg = length(g.coeff)
+    # initialise coeffs and exponents vectors for the sum h = f + g
+    h_coeff = Dict()
+    h_exp = Vector()
+    # initialise indexing variable for loops below
+    j=1
+    # at each term of g, check if there is a term of f with matching exponents
+    for i in eachindex(g)
+        # if we have exchausted all terms of f then we need to add all the remaining terms of g
+        if j > lf 
+               c = g.exp[i] 
+               h_coeff[c] = g.coeff[c]
+               push!(h_exp, c)
+        else 
+            # loop through terms of f ordered lexicographically, until we reach a term with a larger power 
+            while j <= lf
+                c = g.exp[i] 
+                d = f.exp[j]
+                if d > c 
+                    # if c > d then we have reached the first exponent of f larger than c so we can stop here, and add the i-th 
+                    # term of g to h.
+                    h_coeff[c] = g.coeff[c]
+                    push!(h_exp, c)
+                    break
+                elseif c == d 
+                    # if we reach an equal exponent, both get added simultaneously to the sum.
+                    h_coeff[c] = f.coeff[c]+g.coeff[c]
+                    push!(h_exp, c)
+                    # update j for the iteration with the next i
+                    j+=1
+                    break
+                else 
+                    # if d < c then we can add that exponent of f to the sum
+                    h_coeff[d] = f.coeff[d]
+                    push!(h_exp, d)
+                    #if j < lf 
+                    j+=1
                 end 
-            #push!(linear_map, [f.coeff[i] - g.coeff[j], f.exp[i] - g.exp[j]])
-            end 
-        end 
-    end
-    #println(linear_map)
-    linear_map_unique = unique([l for (key, l) in linear_map])
-    if length(linear_map) == length(linear_map_unique)
-        return linear_map, Dict(), false
-    else 
-        #print("here")
-        # compute indices of repetitions for each linear map
-        reps = [(l, Base.findall(x -> x == l, linear_map)) for l in linear_map_unique]
-        #print(reps)
-        #print("here")
-        # reps' is the dictionary indexed by linear maps, where the entry for l is the indices of repetitions in the array `linear_map`
-        #reps' = Dict(reps)
-        #= # this can probably be made more efficient...
-        for i in linear_map_unique 
-            ith_reps = []
-            for j in Base.eachindex(linear_map)
-                if linear_map[j] == i 
-                    append!(ith_reps, j)
-                end 
-            end 
-            append!(reps, ith_reps)
-        end  =#
-        return linear_map, reps, true 
-    end
-end 
-
-#= function rat_linear_partition(f::TropicalPuissieuxPoly, g::TropicalPuissieuxPoly)
-    lin_f, ignore_f = enum_linear_regions(f)
-    lin_g, ignore_g = enum_linear_regions(g)
-    return [Oscar.intersect(p1, p2) for (_, p1) in lin_f for (_, p2) in lin_g]
-end  =#
-
-function connected_closure(V, D)
-    #visited = Dict(V .=> false)
-    comp = Dict(V .=> V)
-    for v in V 
-        for w in V 
-            if v == w || (haskey(D, (v, w)) && D[(v, w)]) || (haskey(D, (w, v)) && D[(w, v)]) 
-                comp[w] = comp[v]
-            end
-        end 
-    end 
-    return unique([v for (_, v) in comp])
-end
-
-function enum_linear_regions_rat(f::TropicalPuissieuxPoly, g::TropicalPuissieuxPoly)
-    lin_f = enum_linear_regions(f)
-    lin_g = enum_linear_regions(g)
-    linear_maps, reps, exists_reps = check_linear_repetitions(f, g)
-    lin_regions = []
-    if exists_reps 
-        has_intersect = Dict()
-        # first find all pairwise intersections of polytopes.
-        #println(reps)
-        for (_, vals) in reps 
-            if length(vals) == 1 
-                append!(lin_regions, vals)
-            else
-                #println(vals)
-                for ((i, j), (k, l)) in combinations(vals, 2)
-                    #println(i, j, k, l)
-                    poly11, _ = lin_f[i]
-                    poly12, _ = lin_g[j]
-                    poly21, _ = lin_f[k]
-                    poly22, _ = lin_g[l]
-                    poly1 = Oscar.intersect(poly11, poly12)
-                    poly2 = Oscar.intersect(poly21, poly22)
-                    int = Oscar.intersect(poly1, poly2)
-                    has_intersect[((i, j), (k, l))] = Oscar.is_feasible(int)
-                end
-                # now find transitive closure of the relation given by dictionary has_intersect.
-                append!(lin_regions, connected_closure(vals, has_intersect))
+                # Note about the indexing variable j:
+                # Since a iteration i, we stop when we have either reached a j whose corresponding exponent is too large, or 
+                # equal to that of i, we can start the iteration of i+1 at the j at which the previous iteration stopped.
             end 
         end
-        return lin_regions 
+    end 
+    # once we have exhausted all terms of g, we need to check for remaining terms of f
+    while j <= lf 
+        d = f.exp[j]
+        h_coeff[d] = f.coeff[d]
+        push!(h_exp, d)
+        j+=1
+    end 
+    h = TropicalPuiseuxPoly(h_coeff, h_exp, true)
+    return h
+end 
+
+# Lexicographic product of lexicographically ordered puisieux polynomials
+# This is currently buggy and should be fixed.
+function Base.:*(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
+    prod = TropicalPuiseuxPoly_zero(nvars(f), f)
+    for i in eachindex(g)
+        term_coeff = Dict()
+        for (key, elem) in f.coeff
+            term_coeff[key+g.exp[i]] = g.coeff[g.exp[i]] * elem
+        end 
+        term_exp = [g.exp[i] + f.exp[j] for j in eachindex(f)]
+        prod += TropicalPuiseuxPoly(term_coeff, term_exp, true)
+    end 
+    return prod 
+end 
+
+function Base.string(f::TropicalPuiseuxPoly)
+    str = ""
+    if nvars(f)==1
+        for i in eachindex(f)
+            if i == 1 
+                str *= repr(f.coeff[f.exp[i]]) * "*T^" * repr(f.exp[i][1])
+            else 
+                str *= " + " * repr(f.coeff[f.exp[i]]) * "*T^" * repr(f.exp[i][1])
+            end 
+        end 
     else 
-        # if there are no repetitions, then the linear regions are just the intersections of the linear regions of f and the linear regions of g
-        return [Oscar.intersect(p1, p2) for (p1, _) in lin_f for (p2, _) in lin_g]
-    end
+        for i in eachindex(f)
+            if i == 1
+                str *= repr(f.coeff[f.exp[i]]) 
+            else 
+                str *= " + " * repr(f.coeff[f.exp[i]]) 
+            end 
+            exp = f.exp[i]
+            for j in eachindex(exp)
+                str *= "*T_" * repr(j) + "^" * repr(exp[j])   
+            end
+        end
+    end 
+    return str
 end 
 
-### UNIT TESTS ####
-# f = 0x + 1x^2 + 2x^5
-#f = TropicalPuissieuxPoly([0.0, 1.0, 2.0], [[1.0, 0.0, 8.1, 8.1], [2.0, 5.0, 8.8, 9.9], [5.0, 8.0, 1.1, 0.1]])
-#g = TropicalPuissieuxPoly([1.0, 1.0, 2.0], [[0.0, 0.0, 11.0, 17.0], [1.0, 8.0, 8.8, 9.0], [4.0, 11.0, 0.5, 8.1]])
-#f = TropicalPuissieuxPoly([1.0, 1.0, 1.0], [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
-
-#println(polyhedron(f, 2))
-#println(enum_linear_regions(f))
-#println(check_linear_repetitions(f, g, 1, 1))
-#println(length(enum_linear_regions_rat(f, g)))
-
-n_terms = 50
-n_variables = 28
-
-for i in 1:2
-    c_f = rand(Float64, n_terms)
-    c_g = rand(Float64, n_terms)
-    exp_f = []
-    exp_g = []
-    for j in 1:n_terms 
-        push!(exp_f, rand(Float64, n_variables))
-        push!(exp_g, rand(Float64, n_variables))
-    end
-    #println(exp_f)
-    f = TropicalPuissieuxPoly(c_f, exp_f)
-    g = TropicalPuissieuxPoly(c_g, exp_g)
-    println(length(enum_linear_regions_rat(f, g)))
+function Base.repr(f::TropicalPuiseuxPoly)
+    return string(f)
 end 
+
+"""# implement me 
+function Base.comp(f::TropicalPuissieuxRational, g::TropicalPuissieuxRational)
+    return false 
+end 
+
+# implement me 
+function Base.:+(f::TropicalPuissieuxRational, g::TropicalPuissieuxRational)
+    return false
+end 
+
+# implement me 
+function Base.:*(f::TropicalPuissieuxRational, g::TropicalPuissieuxRational)
+    return false
+end 
+
+# implement me 
+function Base.comp(f::TropicalPuissieuxRational, g::TropicalPuissieuxRational)
+    return false 
+end """
+
+
+###### UNIT TESTS ###########
+
+R = tropical_semiring(max)
+
+f_coeff = [R(1), R(2)]
+g_coeff = [R(2), R(1)]
+h_coeff = [R(1), R(8)]
+f_exp = [[1.0], [0.0]]
+g_exp = [[1.0], [0.0]]
+h_exp = [[1.2], [4.8]]
+
+f = TropicalPuiseuxPoly(f_coeff, f_exp)
+g = TropicalPuiseuxPoly(g_coeff, g_exp)
+h = TropicalPuiseuxPoly(h_coeff, h_exp)
+
+println(string(f*f))
