@@ -47,11 +47,11 @@ function TropicalPuiseuxPoly_zero(n, f)
 end 
 
 function TropicalPuiseuxPoly_one(n, f::TropicalPuiseuxPoly)
-    return TropicalPuiseuxPoly_one(n, zero(f.coeff[f.exp[1]]))
+    return TropicalPuiseuxPoly_one(n, one(f.coeff[f.exp[1]]))
 end 
 
 function TropicalPuiseuxPoly_one(n, c::TropicalSemiringElem)
-    return TropicalPuiseuxPoly_const(n, zero(c))
+    return TropicalPuiseuxPoly_const(n, one(c))
 end 
 
 
@@ -97,11 +97,11 @@ function Oscar.nvars(f::TropicalPuiseuxRational)
 end 
 
 function TropicalPuiseuxRational_zero(n, f)
-    return TropicalPuiseuxRational(TropicalPuiseuxPoly_zero(n, f), TropicalPuiseuxPoly_one(n, f))
+    return TropicalPuiseuxRational(TropicalPuiseuxPoly_zero(n, f.num), TropicalPuiseuxPoly_one(n, f.den))
 end 
 
 function TropicalPuiseuxRational_one(n, f)
-    return TropicalPuiseuxRational(TropicalPuiseuxPoly_one(n, f), TropicalPuiseuxPoly_one(n, f))
+    return TropicalPuiseuxRational(TropicalPuiseuxPoly_one(n, f.num), TropicalPuiseuxPoly_one(n, f.num))
 end 
 
 # todo. how do we want to keep track of the sorting?
@@ -109,6 +109,7 @@ function Base.:/(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
     return TropicalPuiseuxRational(f, g)
 end 
 
+# This currently is buggy for sums of monomials...
 function Base.:+(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
     """
     Takes two TropicalPuiseuxPoly whose exponents are lexicographically ordered and outputs the sum with 
@@ -123,47 +124,52 @@ function Base.:+(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
     j=1
     # at each term of g, check if there is a term of f with matching exponents
     for i in eachindex(g)
-        # if we have exchausted all terms of f then we need to add all the remaining terms of g
-        if j > lf 
-               c = g.exp[i] 
-               h_coeff[c] = g.coeff[c]
-               push!(h_exp, c)
-        else 
-            # loop through terms of f ordered lexicographically, until we reach a term with a larger power 
-            while j <= lf
-                c = g.exp[i] 
-                d = f.exp[j]
-                if d > c 
+        c = g.exp[i] 
+        # loop through terms of f ordered lexicographically, until we reach a term with a larger power 
+        while j <= lf
+            d = f.exp[j]
+            if d > c 
+                if g.coeff[c] != zero(g.coeff[c])
                     # if c > d then we have reached the first exponent of f larger than c so we can stop here, and add the i-th 
                     # term of g to h.
                     h_coeff[c] = g.coeff[c]
                     push!(h_exp, c)
-                    break
-                elseif c == d 
+                end 
+                break
+            elseif c == d 
+                if g.coeff[c] != zero(g.coeff[c]) || f.coeff[c] != zero(g.coeff[c])
                     # if we reach an equal exponent, both get added simultaneously to the sum.
                     h_coeff[c] = f.coeff[c]+g.coeff[c]
                     push!(h_exp, c)
-                    # update j for the iteration with the next i
-                    j+=1
-                    break
-                else 
+                end 
+                # update j for the iteration with the next i
+                j+=1
+                break
+            else 
+                if f.coeff[d] != zero(f.coeff[d])
                     # if d < c then we can add that exponent of f to the sum
                     h_coeff[d] = f.coeff[d]
                     push!(h_exp, d)
-                    #if j < lf 
-                    j+=1
                 end 
-                # Note about the indexing variable j:
-                # Since a iteration i, we stop when we have either reached a j whose corresponding exponent is too large, or 
-                # equal to that of i, we can start the iteration of i+1 at the j at which the previous iteration stopped.
+                j+=1
             end 
-        end
+            # Note about the indexing variable j:
+            # Since a iteration i, we stop when we have either reached a j whose corresponding exponent is too large, or 
+            # equal to that of i, we can start the iteration of i+1 at the j at which the previous iteration stopped.
+        end 
+        # if we have exchausted all terms of f then we need to add all the remaining terms of g
+        if j > lf && g.coeff[c] != zero(g.coeff[c])
+            h_coeff[c] = g.coeff[c]
+            push!(h_exp, c)
+        end 
     end 
     # once we have exhausted all terms of g, we need to check for remaining terms of f
     while j <= lf 
         d = f.exp[j]
-        h_coeff[d] = f.coeff[d]
-        push!(h_exp, d)
+        if f.coeff[d] != zero(f.coeff[d])
+            h_coeff[d] = f.coeff[d]
+            push!(h_exp, d)
+        end 
         j+=1
     end 
     h = TropicalPuiseuxPoly(h_coeff, h_exp, true)
@@ -174,13 +180,18 @@ end
 # This is currently buggy and should be fixed.
 function Base.:*(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
     prod = TropicalPuiseuxPoly_zero(nvars(f), f)
+    # if f = a_0 + ... + a_n T^n and g = b_0 + ... + b_n then the product is 
+    # the sum of all the b_i T^i * f
     for i in eachindex(g)
         term_coeff = Dict()
+        # compute the coefficients of b_i T^i * f
         for (key, elem) in f.coeff
             term_coeff[key+g.exp[i]] = g.coeff[g.exp[i]] * elem
         end 
+        # compute the exponenets of b_i T^i * f
         term_exp = [g.exp[i] + f.exp[j] for j in eachindex(f)]
         prod += TropicalPuiseuxPoly(term_coeff, term_exp, true)
+        #println(string(TropicalPuiseuxPoly(term_coeff, term_exp, true)))
     end 
     return prod 
 end 
@@ -203,7 +214,7 @@ function Base.string(f::TropicalPuiseuxPoly)
             end 
             exp = f.exp[i]
             for j in Base.eachindex(exp)
-                str *= "*T_" * repr(j) * "^" * repr(exp[j])   
+                str *= " * T_" * repr(j) * " ^ " * repr(exp[j])   
             end 
         end
     end
@@ -220,18 +231,26 @@ end
 
 # exponentiation of a tropical Puiseux polynomial by a positive rational
 function Base.:^(f::TropicalPuiseuxPoly, rat::Float64)
-    new_f_coeff = Dict()
-    new_f_exp = copy(f.exp)
-    new_f_exp = rat * new_f_exp 
-    for (key, elem) in f.coeff
-        new_f_coeff[rat*key] = elem
+    if rat == 0
+        return TropicalPuiseuxPoly_one(nvars(f), f)
+    else 
+        new_f_coeff = Dict()
+        new_f_exp = copy(f.exp)
+        new_f_exp = rat * new_f_exp 
+        for (key, elem) in f.coeff
+            new_f_coeff[rat*key] = elem
+        end 
+        return TropicalPuiseuxPoly(new_f_coeff, new_f_exp, true)
     end 
-    return TropicalPuiseuxPoly(new_f_coeff, new_f_exp, true)
 end 
 
 # exponentiation of a tropical Puiseux rational function by a positive rational
 function Base.:^(f::TropicalPuiseuxRational, rat::Float64)
-    return TropicalPuiseuxRational(f.num^rat , f.den^rat)
+    if rat == 0
+        return TropicalPuiseuxRational_one(nvars(f), f)
+    else 
+        return TropicalPuiseuxRational(f.num^rat , f.den^rat)
+    end 
 end 
 
 function Base.:^(f::TropicalPuiseuxPoly, int::Int64)
@@ -246,7 +265,11 @@ end
 
 # exponentiation of a tropical Puiseux rational function by a positive integer
 function Base.:^(f::TropicalPuiseuxRational, int::Int64)
-    return TropicalPuiseuxRational(f.num^int , f.denom^int)
+    if int == 0
+        return TropicalPuiseuxRational_one(nvars(f), f)
+    else 
+        return TropicalPuiseuxRational(f.num^int , f.denom^int)
+    end 
 end 
 
 function Base.:*(a::TropicalSemiringElem, f::TropicalPuiseuxPoly)
@@ -256,10 +279,6 @@ function Base.:*(a::TropicalSemiringElem, f::TropicalPuiseuxPoly)
         new_f_coeff[f.exp[i]] = a*f.coeff[f.exp[i]]
     end 
     return TropicalPuiseuxPoly(new_f_coeff, new_f_exp, true)
-end 
-
-function Base.:*(a::TropicalSemiringElem, f::TropicalPuiseuxRational)
-    return TropicalPuiseuxRational(a*f.num, f.den)
 end 
 
 # univariate case 
@@ -325,27 +344,40 @@ function Base.:/(f::TropicalPuiseuxRational, g::TropicalPuiseuxRational)
     return TropicalPuiseuxRational(num, den)
 end 
 
+function Base.:*(a::TropicalSemiringElem, f::TropicalPuiseuxRational)
+    return TropicalPuiseuxRational(a*f.num, f.den)
+end 
 
 #univariate case
 function comp(f::TropicalPuiseuxPoly, g::TropicalPuiseuxRational)
-    comp = TropicalPuiseuxRational_zero(nvars(g), f)
+    comp = TropicalPuiseuxRational_zero(nvars(g), g)
     for (key, val) in f.coeff
+        #println("here")
         comp += val * g^key[1]
+        #println("g = ", string(g), " ", "pow g = ", string(g^key[1]), " key = ", key[1])
+        #println(" val * g^key[1] = ", string(val * g^key[1]), " sum = ", string(comp))
     end 
     return comp
 end 
 
 # multivariate case
-function comp(f::TropicalPuiseuxPoly, G::Vector{TropicalPuiseuxRational})   
-    comp = TropicalPuiseuxRational_zero(nvars(G[1]), f)
-    for (key, val) in f.coeff
-        term = TropicalPuiseuxRational_one(nvars(G[1]), f)
-        for i in Base.eachindex(G)
-            term *= G[i]^key[i]    
+function comp(f::TropicalPuiseuxPoly, G::Vector{TropicalPuiseuxRational}) 
+    if length(G) != nvars(f)
+        println("Number of variables issue")  
+    else 
+        #println("computing composition")
+        comp = TropicalPuiseuxRational_zero(nvars(G[1]), G[1])
+        for (key, val) in f.coeff
+            term = TropicalPuiseuxRational_one(nvars(G[1]), G[1])
+            for i in Base.eachindex(G)
+                #println("here", i)
+                term *= G[i]^key[i]  
+            end 
+            #println("No of monomials: ", length(term.num.exp), " and ", length(term.den.exp))
+            comp += val * term 
         end 
-        comp += val * term 
+        return comp
     end 
-    return comp
 end 
 
 # implement me 
@@ -369,13 +401,28 @@ R = tropical_semiring(max)
 f_coeff = [R(1), R(2)]
 g_coeff = [R(2), R(1)]
 h_coeff = [R(1), R(8)]
+i_coeff = [R(1), R(8), R(7)]
+j_coeff = [one(R)]
 f_exp = [[1.0], [0.0]]
 g_exp = [[1.0], [0.0]]
-h_exp = [[1.2], [4.8]]
+h_exp = [[1.2, 3.9], [4.8, 1.7]]
+i_exp = [[0.0], [1.0], [2.0]]
+j_exp = [[0.0]]
 
 f = TropicalPuiseuxPoly(f_coeff, f_exp)
 g = TropicalPuiseuxPoly(g_coeff, g_exp)
 h = TropicalPuiseuxPoly(h_coeff, h_exp)
+i = TropicalPuiseuxPoly(i_coeff, i_exp)
+j = TropicalPuiseuxPoly(j_coeff, j_exp)
 
-println(string(f^4))
-println(string(comp(f, g)))
+#println(string(f*j))
+println(string(j*f))
+#println(string(f^4))
+#println(string(comp(i, f / g)))
+#println(string(f/g + f/g))
+#println(string(i+f))
+#println(string(g+i))
+#println(string(f*TropicalPuiseuxPoly_one(1, f)), " = ", string(f))
+
+#F = TropicalPuiseuxRational(f, g)
+#println(string(comp(h, [F, F])))
