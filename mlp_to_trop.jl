@@ -1,12 +1,7 @@
 using Pkg 
-Pkg.add("Oscar")
-#Pkg.add("StatsBase")
-Pkg.add("Combinatorics")
 using Oscar
-#using StatsBase
 using Combinatorics
 include("rat_maps.jl")
-#using rat_maps
 
 # takes in weight matrix A, bias term b and activation threshold t and outputs vector of tropical rational functions  
 function single_to_trop(A, b, t)
@@ -50,53 +45,55 @@ end
 
 
 ######### Unit tests #############
-R = tropical_semiring(max)
-A1 = [[1.0, 1.0],
-     [2.0, 2.2 ]]
+function test_mlp_to_trop()
+    R = tropical_semiring(max)
+    A1 = [[1.0, 1.0],
+        [2.0, 2.2 ]]
 
-A2 = [[1], [2]]
+    A2 = [[1], [2]]
 
-b1 = [R(1),
-     R(2)]
+    b1 = [R(1),
+        R(2)]
 
-b2 = [R(1)]
+    b2 = [R(1)]
 
-t1 = [R(2), 
-      R(2)]
+    t1 = [R(2), 
+        R(2)]
 
-t2 = [R(0)]
+    t2 = [R(0)]
 
-#println(single_to_trop(A1, b1, t1))
-#p = mlp_to_trop([A1, A2], [b1, b2], [t1, t2])[1]
-#println(string(p))
+    #println(single_to_trop(A1, b1, t1))
+    #p = mlp_to_trop([A1, A2], [b1, b2], [t1, t2])[1]
+    #println(string(p))
 
-d1 = 5
-d2 = 2
-d3 = 2
-d4 = 10
-d5 = 1
+    d1 = 5
+    d2 = 2
+    d3 = 2
+    d4 = 10
+    d5 = 1
 
-A1 = rand(d1, d2)
-A2 = rand(d2, d3)
-A3 = rand(d3, d4)
-A4 = rand(d4, d5)
+    A1 = rand(d1, d2)
+    A2 = rand(d2, d3)
+    A3 = rand(d3, d4)
+    A4 = rand(d4, d5)
 
-b1 = [R(QQ(Rational(i))) for i in rand(Float32, d2)]
-b2 = [R(QQ(Rational(i))) for i in rand(Float32, d3)]
-b3 = [R(QQ(Rational(i))) for i in rand(Float32, d4)]
-b4 = [R(QQ(Rational(i))) for i in rand(Float32, d5)]
+    b1 = [R(QQ(Rational(i))) for i in rand(Float32, d2)]
+    b2 = [R(QQ(Rational(i))) for i in rand(Float32, d3)]
+    b3 = [R(QQ(Rational(i))) for i in rand(Float32, d4)]
+    b4 = [R(QQ(Rational(i))) for i in rand(Float32, d5)]
 
-t1 = [R(QQ(Rational(i))) for i in rand(Float32,d2)]
-t2 = [R(QQ(Rational(i))) for i in rand(Float32, d3)]
-t3 = [R(QQ(Rational(i))) for i in rand(Float32, d4)]
-t4 = [R(QQ(Rational(i))) for i in rand(Float32, d5)]
+    t1 = [R(QQ(Rational(i))) for i in rand(Float32,d2)]
+    t2 = [R(QQ(Rational(i))) for i in rand(Float32, d3)]
+    t3 = [R(QQ(Rational(i))) for i in rand(Float32, d4)]
+    t4 = [R(QQ(Rational(i))) for i in rand(Float32, d5)]
 
-p = mlp_to_trop([A1, A2, A3, A4], [b1, b2, b3, b4], [t1, t2, t3, t4])[1] #+ mlp_to_trop([A1, A2, A3, A4], [b1, b2, b3, b4], [t1, t2, t3, t4])[2]
-arr1 = copy(p.num.exp)
-arr2 = copy(p.den.exp)
-println(length(arr1))
-println(length(arr2))
-filter!(e -> p.num.coeff[e] != zero(R), arr1)
-filter!(e -> p.den.coeff[e] != zero(R), arr2)
-println(length(arr1))
-println(length(arr2))
+    p = mlp_to_trop([A1, A2, A3, A4], [b1, b2, b3, b4], [t1, t2, t3, t4])[1] #+ mlp_to_trop([A1, A2, A3, A4], [b1, b2, b3, b4], [t1, t2, t3, t4])[2]
+    arr1 = copy(p.num.exp)
+    arr2 = copy(p.den.exp)
+    println(length(arr1))
+    println(length(arr2))
+    filter!(e -> p.num.coeff[e] != zero(R), arr1)
+    filter!(e -> p.den.coeff[e] != zero(R), arr2)
+    println(length(arr1))
+    println(length(arr2))
+end 
