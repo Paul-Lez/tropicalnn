@@ -87,7 +87,8 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
     lin_regions = []
     # if there are no repetitions, then the linear regions are just the intersections of the linear regions of f and the linear regions of g
     if !exists_reps 
-        return [Oscar.intersect(p1, p2) for (p1, _) in lin_f for (p2, _) in lin_g]  
+        #[Oscar.intersect(p1, p2) for (p1, _) in lin_f for (p2, _) in lin_g]  
+        return collect(keys(linear_map))
     # if there are repetitions then we will need to find connected components of the union of the polytopes on which repetitons occur.
     else
         # first find all pairwise intersections of polytopes.

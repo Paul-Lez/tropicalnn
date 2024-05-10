@@ -1,9 +1,5 @@
 using Pkg 
-Pkg.add("Oscar")
-#Pkg.add("StatsBase")
-Pkg.add("Combinatorics")
 using Oscar
-#using StatsBase
 using Combinatorics
 
 struct TropicalPuiseuxPoly
