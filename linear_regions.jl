@@ -1,6 +1,7 @@
 using Pkg 
 using Oscar
 using Combinatorics
+using Base.Threads
 include("rat_maps.jl")
 
 
@@ -65,8 +66,8 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
         end 
         linear_map = Dict()
         # We need to check for pairwise intersection of each polytope, by iterating over
-        for i in eachindex(f)
-            for j in eachindex(g)
+        Threads.@threads for i in eachindex(f)
+            Threads.@threads for j in eachindex(g)
                 # we only need to do the checks on linear regions that are attained by f and g
                 if lin_f[i][2] && lin_g[j][2]
                     # check if the polytopes intersect
@@ -76,7 +77,7 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
                     #########println(t2-t1)
                     # if they intersect on a large enough region then add this to the list of linear maps that arise in f/g
                     if Oscar.is_feasible(poly) && Oscar.dim(poly) == nvars(f)
-                        linear_map[poly] = [f.coeff[f.exp[i]] - g.coeff[g.exp[j]], f.exp[i] - g.exp[j]]
+                        Threads.@inbounds linear_map[poly] = [f.coeff[f.exp[i]] - g.coeff[g.exp[j]], f.exp[i] - g.exp[j]]
                     end 
                 end 
             end 
