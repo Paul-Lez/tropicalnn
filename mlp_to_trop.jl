@@ -15,7 +15,6 @@ function single_to_trop(A, b, t)
             pos[i] = max(A[i, j], 0)
             neg[i] = max(-A[i, j], 0)
         end
-        #println(A[:, j])
         # the numerator is the monomial given by the positive part, with coeff b[i], plus the monomial given by the negative part 
         # with coeff t[i]
         num = TropicalPuiseuxMonomial(b[j], pos) + TropicalPuiseuxMonomial(t[j], neg)

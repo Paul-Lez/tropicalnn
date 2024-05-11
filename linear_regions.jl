@@ -6,7 +6,7 @@ include("rat_maps.jl")
 
 function polyhedron(f::TropicalPuiseuxPoly, i)
     # take A to be the matrix as in the overleaf document
-    A = Base.reduce(vcat, [f.exp[j] - f.exp[i] for j in eachindex(f)]')
+    A = mapreduce(permutedims, vcat, [f.exp[j] - f.exp[i] for j in eachindex(f)])
     # and ditto for b
     b = [f.coeff[f.exp[i]] - f.coeff[j] for j in f.exp]
     # return the corresponding linear region
@@ -47,16 +47,22 @@ function connected_closure(V, D)
 end
 
 #TODO Paul: work out what we want to have as output when there are repetitions
-function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
+function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly, verbose=false)
     """
     Should output the linear regions of a tropical Puiseux rational function. 
 
     """
     # first, compute the linear regions of f and g. 
+    if verbose
+        println("Computing linear regions of f and g")
+    end 
     lin_f = enum_linear_regions(f)
     lin_g = enum_linear_regions(g)
     # next, check which for repetitions of the linear map corresponding to f/g on intersections of the linear regions computed above.
     function check_linear_repetitions()
+        if verbose 
+            println("Computing non-empty intersections of linear regions")
+        end 
         linear_map = Dict()
         # We need to check for pairwise intersection of each polytope, by iterating over
         for i in eachindex(f)
@@ -64,15 +70,21 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
                 # we only need to do the checks on linear regions that are attained by f and g
                 if lin_f[i][2] && lin_g[j][2]
                     # check if the polytopes intersect
+                    #######t1 = time()
                     poly = Oscar.intersect(lin_f[i][1], lin_g[j][1])
+                    ###########t2 = time()
+                    #########println(t2-t1)
                     # if they intersect on a large enough region then add this to the list of linear maps that arise in f/g
                     if Oscar.is_feasible(poly) && Oscar.dim(poly) == nvars(f)
-                        linear_map[(i, j)] = [f.coeff[f.exp[i]] - g.coeff[g.exp[j]], f.exp[i] - g.exp[j]]
+                        linear_map[poly] = [f.coeff[f.exp[i]] - g.coeff[g.exp[j]], f.exp[i] - g.exp[j]]
                     end 
                 end 
             end 
         end
-
+        if verbose
+            println("Checking for repetitions of linear maps")
+        end 
+        # check for repetitions
         linear_map_unique = unique([l for (key, l) in linear_map])
         if length(linear_map) == length(linear_map_unique)
             return linear_map, [], false
@@ -83,14 +95,16 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
         end
     end 
     linear_map, reps, exists_reps = check_linear_repetitions()
-    # Initialise the array lin_regions. This will contain the true linear regions of f/g
-    lin_regions = []
-    # if there are no repetitions, then the linear regions are just the intersections of the linear regions of f and the linear regions of g
-    if !exists_reps 
-        #[Oscar.intersect(p1, p2) for (p1, _) in lin_f for (p2, _) in lin_g]  
-        return collect(keys(linear_map))
+    # if there are no repetitions, then the linear regions are just the non-empty intersections of linear regions of f and linear regions of g
+    if !exists_reps   
+        lin_regions = collect(keys(linear_map))
     # if there are repetitions then we will need to find connected components of the union of the polytopes on which repetitons occur.
     else
+        if verbose 
+            println("Computing connected components for repeated linear maps")
+        end 
+        # Initialise the array lin_regions. This will contain the true linear regions of f/g
+        lin_regions = []
         # first find all pairwise intersections of polytopes.
         for (_, vals) in reps 
             # if vals has length 1 then there is no other linear region with the same linear map
@@ -100,17 +114,8 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
                 # otherwise, we check for intersections in the set of linear regions with a given map
                 has_intersect = Dict()
                 # iterate over unordered pairs of (distinct) elements of vals
-                for ((i, j), (k, l)) in combinations(vals, 2)
-                    # note that we don't care about the bool here because all linear regions that appear from the indices i,j,k,l are realisable
-                    poly11, _ = lin_f[i]
-                    poly12, _ = lin_g[j]
-                    poly21, _ = lin_f[k]
-                    poly22, _ = lin_g[l]
-                    # compute the intersection of the two first polyhedra (i.e. i and j)
-                    poly1 = Oscar.intersect(poly11, poly12)
-                    # compute intersection of last two polyhedra (i.e. k and l)
-                    poly2 = Oscar.intersect(poly21, poly22)
-                    # now intersect these two 
+                for (poly1, poly2) in combinations(vals, 2)
+                    # intersect the two polyhedra
                     intesection = Oscar.intersect(poly1, poly2)
                     # add true to the dictionary if the intersection is nonemtpy as false otherwise
                     has_intersect[((i, j), (k, l))] = Oscar.is_feasible(intesection)
@@ -119,8 +124,11 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
                 append!(lin_regions, connected_closure(vals, has_intersect))
             end 
         end
-        return lin_regions
     end
+    if verbose 
+        println("The number of linear regions of the rational function is ", length(lin_regions))
+    end 
+    return lin_regions
 end 
 
 ### UNIT TESTS ####

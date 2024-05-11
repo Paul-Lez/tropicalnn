@@ -1,25 +1,43 @@
 using Pkg 
 using Oscar
 using Combinatorics
+using Plots
+using JLD2
 include("rat_maps.jl")
 include("linear_regions.jl")
 include("mlp_to_trop.jl")
 
-n_terms = 50
-n_variables = 5
+# This file computes the (averaged over a few samples) number of linear regions of a tropical rational 
+# function, for vatious numbers of terms and variables 
 
-for i in 1:2
-    c_f = rand(Float64, n_terms)
-    c_g = rand(Float64, n_terms)
-    exp_f = []
-    exp_g = []
-    for j in 1:n_terms 
-        push!(exp_f, rand(Float64, n_variables))
-        push!(exp_g, rand(Float64, n_variables))
-    end
-    #println(exp_f)
-    f = TropicalPuiseuxPoly(c_f, exp_f)
-    g = TropicalPuiseuxPoly(c_g, exp_g)
-    lins = enum_linear_regions_rat(f, g)
-    println(length(lins))
+n_variables = 2
+n_terms = [20, 50, 100] #, 200, 350, 500, 800, 1000
+output = []
+n_samples = 2
+
+for i in Base.eachindex(n_terms)
+    println("Linear regions computation for ", n_terms[i], " variables \n")
+    n_lin = 0
+    for s in 1:n_samples 
+        println("Computation for sample ", s)
+        c_f = [QQ(Rational(j)) for j in rand(Float64, n_terms[i])]
+        c_g = [QQ(Rational(j)) for j in rand(Float64, n_terms[i])]
+        exp_f = []
+        exp_g = []
+        for j in 1:n_terms[i]
+            push!(exp_f, [QQ(Rational(j)) for j in rand(Float64, n_variables)])
+            push!(exp_g, [QQ(Rational(j)) for j in rand(Float64, n_variables)])
+        end
+        #println(exp_f)
+        f = TropicalPuiseuxPoly(c_f, exp_f)
+        g = TropicalPuiseuxPoly(c_g, exp_g)
+        n_lin += length(enum_linear_regions_rat(f, g, true))
+        println(" ")
+    end 
+    push!(output, n_lin / n_samples)
 end 
+
+JLD2.save_object("output_array.jld2", output)
+
+plot(n_terms, output)
+
