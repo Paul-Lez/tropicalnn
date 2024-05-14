@@ -8,10 +8,16 @@ include("rat_maps.jl")
 function polyhedron(f::TropicalPuiseuxPoly, i)
     # take A to be the matrix as in the overleaf document
     A = mapreduce(permutedims, vcat, [f.exp[j] - f.exp[i] for j in eachindex(f)])
-    # and ditto for b
-    b = [f.coeff[f.exp[i]] - f.coeff[j] for j in f.exp]
+    # and ditto for b. First however we need to convert elements of b to Floats since they are elements are the tropical semiring.
+    b = [Float64(Rational(f.coeff[f.exp[i]])) - Float64(Rational(f.coeff[j])) for j in f.exp]
     # return the corresponding linear region
-    return Oscar.polyhedron(A, b)
+    try 
+        return Oscar.polyhedron(A, b)
+    catch e
+        println(A)
+        println(b)
+        println(e)
+    end 
 end 
 
 # return a list of the linear regions of f
@@ -77,7 +83,7 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
                     #########println(t2-t1)
                     # if they intersect on a large enough region then add this to the list of linear maps that arise in f/g
                     if Oscar.is_feasible(poly) && Oscar.dim(poly) == nvars(f)
-                        Threads.@inbounds linear_map[poly] = [f.coeff[f.exp[i]] - g.coeff[g.exp[j]], f.exp[i] - g.exp[j]]
+                        Threads.@inbounds linear_map[poly] = [Rational(f.coeff[f.exp[i]]) - Rational(g.coeff[g.exp[j]]), f.exp[i] - g.exp[j]]
                     end 
                 end 
             end 
@@ -119,7 +125,7 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
                     # intersect the two polyhedra
                     intesection = Oscar.intersect(poly1, poly2)
                     # add true to the dictionary if the intersection is nonemtpy as false otherwise
-                    has_intersect[((i, j), (k, l))] = Oscar.is_feasible(intesection)
+                    has_intersect[(poly1, poly2)] = Oscar.is_feasible(intesection)
                 end
                 # now find transitive closure of the relation given by dictionary has_intersect.
                 append!(lin_regions, connected_closure(vals, has_intersect))

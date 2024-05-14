@@ -7,10 +7,12 @@ include("rat_maps.jl")
 include("linear_regions.jl")
 include("mlp_to_trop.jl")
 
-# This file computes the (averaged over a few samples) number of linear regions of a tropical rational 
-# function, for vatious numbers of terms and variables 
+# This file contains the tropical geometry experiments for the paper 
 
-function computations(n_variables, n_terms, n_samples)
+"""
+Experiment 1: compute number of linear regions as the number of monomials varies.
+"""
+function rational_map_linear_region_computations(n_variables, n_terms, n_samples)
     output = []
     for i in Base.eachindex(n_terms)
         println("Linear regions computation for ", n_terms[i], " variables \n")
@@ -33,9 +35,47 @@ function computations(n_variables, n_terms, n_samples)
         end 
         push!(output, n_lin / n_samples)
     end 
-
-    JLD2.save_object("output_array.jld2", output)
+    return output
+    #JLD2.save_object("output_array.jld2", output)
 end 
 
-#plot(n_terms, output)
+"""
+Experiment 2: Compute number of monomials that appear in the tropical Puiseux rational expression of a neural network and vary the architecture.
+"""
+function monomial_counting(architectures)
+    # this array will store the number of monomials for each architecture
+    n_monomials = zeros(length(architectures))
+    for i in Base.eachindex(architectures)
+        # with a random neural network with a given architecture 
+        weights, bias, thresholds = random_mlp(architectures[i], false)
+        # compute the corresponding array of tropical Puiseux rational maps
+        trop = mlp_to_trop(weights, bias, thresholds)
+        # count the number of monomials that appear there, i.e. sum of monomials in numeral and denominator over all possible entries of the array
+        n_mon = sum([length(i.den.exp)+length(i.num.exp) for i in trop])
+        n_monomials[i] = n_mon
+    end
+    return n_monomials
+end 
 
+"""
+Experiment 3: Compute the number of linear regions of a neural network as architecture varies
+"""
+function untrained_linear_region_computations(architectures)
+    # this array will store the number of linear regions for each architecture
+    n_regions = zeros(length(architectures))
+    for i in Base.eachindex(architectures)
+        # with a random neural network with a given architecture 
+        weights, bias, thresholds = random_mlp(architectures[i], false)
+        # compute the tropical Puiseux rational map
+        trop = mlp_to_trop(weights, bias, thresholds)[1]
+        # count the number of linear regions of the network
+        n_reg = length(enum_linear_regions_rat(trop.num, trop.den))
+        n_regions[i] = n_reg
+    end
+    return n_regions 
+end 
+
+
+function trained_linear_region_computation()
+    return false
+end 

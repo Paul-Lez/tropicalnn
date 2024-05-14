@@ -1,11 +1,17 @@
 using Pkg 
 using Oscar
 using Combinatorics
+using Distributions
 include("rat_maps.jl")
 
 # takes in weight matrix A, bias term b and activation threshold t and outputs vector of tropical rational functions  
 function single_to_trop(A, b, t)
     G = Vector{TropicalPuiseuxRational}()
+    R = tropical_semiring(max)
+    # first make sure that the entries of b are elements of the tropical semiring
+    b = [R(Rational(i)) for i in b]
+    # and same for t
+    t = [R(Rational(i)) for i in t]
     sizehint!(G, size(A, 2))
     for j in axes(A, 2)
         # first split the i-th line of A into its positive and negative components
@@ -26,9 +32,19 @@ function single_to_trop(A, b, t)
     return G
 end     
 
+"""
+mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+
+inputs: linear maps: an array containing the weight matrices of the neural network. 
+        bias: an array containing the biases at each layer
+        thresholds: an array containing the threshold of the activation function at each layer, i.e. the number t such that the activation is of
+        the form x => max(x,t).
+outputs: an object of type TropicalPuiseuxRational.
+"""
 function mlp_to_trop(linear_maps, bias, thresholds)
+    R = tropical_semiring(max)
     # initialisation: the first vector of tropical rational functions is just the identity function
-    output = TropicalPuiseuxRational_identity(size(linear_maps[1], 1), bias[1][1])
+    output = TropicalPuiseuxRational_identity(size(linear_maps[1], 1), R(1))
     # iterate through the layers and compose variable output with the current layer at each step
     for i in Base.eachindex(linear_maps)
         # compute the vector of tropical rational functions corresponding to the function 
@@ -41,7 +57,24 @@ function mlp_to_trop(linear_maps, bias, thresholds)
     return output
 end 
 
+"""
+random_mlp(dims, random_thresholds) returns a multilayer perceptron with architecture specified by the array dims and random weights.
 
+inputs: dims: array of integers specifying the width of each layer
+        random_thresholds: boolean. If set to true, the threshold of the activation function at each layer is chosen at random. Otherwise 
+            the thresholds are all set to 0, i.e. all the activation functions are the ReLU function. Default value is false.
+"""
+function random_mlp(dims, random_thresholds=false)
+    # Use He initialisation, i.e. we sample weights with distribution N(0, sqrt(2/n))
+    weights = [rand(Normal(0, sqrt(2/dims[1])), dims[i], dims[i+1]) for i in 1:length(dims)-1]
+    biases = [rand(Normal(0, sqrt(2/dims[1])), dims[i+1]) for i in 1:length(dims)-1]
+    if random_thresholds
+        thresholds = [rand(dims[i+1]) for i in 1:length(dims)-1]
+    else 
+        thresholds = [zeros(dims[i+1]) for i in 1:length(dims)-1]
+    end 
+    return (weights, biases, thresholds)
+end 
 
 ######### Unit tests #############
 function test_mlp_to_trop()
@@ -96,3 +129,7 @@ function test_mlp_to_trop()
     println(length(arr1))
     println(length(arr2))
 end 
+
+#weights, bias, thresholds = random_mlp([5, 5, 1], true)
+
+#print(mlp_to_trop(weights, bias, thresholds))
