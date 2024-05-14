@@ -4,10 +4,13 @@ using Combinatorics
 using Base.Threads
 include("rat_maps.jl")
 
+function to_Float64(v::Vector)
+    return [Float64(w) for w in v]
+end 
 
 function polyhedron(f::TropicalPuiseuxPoly, i)
     # take A to be the matrix as in the overleaf document
-    A = mapreduce(permutedims, vcat, [f.exp[j] - f.exp[i] for j in eachindex(f)])
+    A = mapreduce(permutedims, vcat, [to_Float64(f.exp[j]) - to_Float64(f.exp[i]) for j in eachindex(f)])
     # and ditto for b. First however we need to convert elements of b to Floats since they are elements are the tropical semiring.
     b = [Float64(Rational(f.coeff[f.exp[i]])) - Float64(Rational(f.coeff[j])) for j in f.exp]
     # return the corresponding linear region

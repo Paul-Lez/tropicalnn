@@ -6,14 +6,12 @@ using Dates
 #TODO: add parser to allow custom inputs from the command line
 
 n_variables = 4
-n_terms = [20]# 50, 100] #, 200, 350, 500, 800, 1000]
+n_terms = [20, 50, 100] #, 200, 350, 500, 800, 1000]
 n_samples = 1
 architectures =[[2, 2, 1], 
                 [3, 3, 1],
                 [4, 4, 2, 1], 
                 [4, 3, 3, 2, 1]] 
-
-architectures = [architectures[1]]
 
 
 # modify these values to select which experiments to run. By default all experiments will run.
@@ -23,7 +21,7 @@ run3 = true
 run4 = true 
 
 # results of each experiment will be saved in a .json log file. By default the file name is "experiment_run_DATE_AND_TIME.json"
-results_file = "experiment_run_" *  string(Dates.now()) * ".json"
+results_file = "results/experiment_run_" *  string(Dates.now()) * ".json"
 open(results_file, "w") do io
 
     if run1

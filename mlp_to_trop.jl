@@ -13,20 +13,20 @@ function single_to_trop(A, b, t)
     # and same for t
     t = [R(Rational(i)) for i in t]
     sizehint!(G, size(A, 2))
-    for j in axes(A, 2)
+    Threads.@threads for j in axes(A, 2)
         # first split the i-th line of A into its positive and negative components
         pos = zeros(size(A, 1))
         neg = zeros(size(A, 1))
-        for i in axes(A, 1)
-            pos[i] = max(A[i, j], 0)
-            neg[i] = max(-A[i, j], 0)
+        Threads.@threads for i in axes(A, 1)
+            Threads.@inbounds pos[i] = max(A[i, j], 0)
+            Threads.@inbounds neg[i] = max(-A[i, j], 0)
         end
         # the numerator is the monomial given by the positive part, with coeff b[i], plus the monomial given by the negative part 
         # with coeff t[i]
-        num = TropicalPuiseuxMonomial(b[j], pos) + TropicalPuiseuxMonomial(t[j], neg)
+        Threads.@inbounds num = TropicalPuiseuxMonomial(b[j], pos) + TropicalPuiseuxMonomial(t[j], neg)
         # the denominator is the monomila given by the negative part, with coeff the tropical multiplicative 
         # unit, i.e. 0
-        den = TropicalPuiseuxMonomial(one(t[j]), neg)
+        Threads.@inbounds den = TropicalPuiseuxMonomial(one(t[j]), neg)
         push!(G, num/den) 
     end 
     return G
@@ -51,7 +51,6 @@ function mlp_to_trop(linear_maps, bias, thresholds)
         # max(Ax+b, t) where A = linear_maps[i], b = bias[i] and t = thresholds[i]
         ith_tropical = single_to_trop(linear_maps[i], bias[i], thresholds[i])
         # compose this with the output of the previous layer
-        println("Doing composition ", i)
         output = comp(ith_tropical, output)
     end 
     return output
