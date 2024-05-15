@@ -110,6 +110,7 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
         lin_regions = collect(keys(linear_map))
     # if there are repetitions then we will need to find connected components of the union of the polytopes on which repetitons occur.
     else
+        println("Linear repetition mode")
         if verbose 
             println("Computing connected components for repeated linear maps")
         end 
@@ -140,14 +141,3 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
     end 
     return lin_regions
 end 
-
-### UNIT TESTS ####
-# f = 0x + 1x^2 + 2x^5
-#f = TropicalPuissieuxPoly([0.0, 1.0, 2.0], [[1.0, 0.0, 8.1, 8.1], [2.0, 5.0, 8.8, 9.9], [5.0, 8.0, 1.1, 0.1]])
-#g = TropicalPuissieuxPoly([1.0, 1.0, 2.0], [[0.0, 0.0, 11.0, 17.0], [1.0, 8.0, 8.8, 9.0], [4.0, 11.0, 0.5, 8.1]])
-#f = TropicalPuissieuxPoly([1.0, 1.0, 1.0], [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0]])
-
-#println(polyhedron(f, 2))
-#println(enum_linear_regions(f))
-#println(check_linear_repetitions(f, g, 1, 1))
-#println(length(enum_linear_regions_rat(f, g)))
