@@ -121,6 +121,7 @@ function Base.:+(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
     # at each term of g, check if there is a term of f with matching exponents
     for i in eachindex(g)
         c = g.exp[i] 
+        added = false
         # loop through terms of f ordered lexicographically, until we reach a term with a larger power 
         while j <= lf
             d = f.exp[j]
@@ -130,6 +131,7 @@ function Base.:+(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
                     # term of g to h.
                     h_coeff[c] = g.coeff[c]
                     push!(h_exp, c)
+                    added = true
                 end 
                 break
             elseif c == d 
@@ -137,6 +139,7 @@ function Base.:+(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
                     # if we reach an equal exponent, both get added simultaneously to the sum.
                     h_coeff[c] = f.coeff[c]+g.coeff[c]
                     push!(h_exp, c)
+                    added = true
                 end 
                 # update j for the iteration with the next i
                 j+=1
@@ -154,7 +157,7 @@ function Base.:+(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
             # equal to that of i, we can start the iteration of i+1 at the j at which the previous iteration stopped.
         end 
         # if we have exchausted all terms of f then we need to add all the remaining terms of g
-        if j > lf && g.coeff[c] != zero(g.coeff[c])
+        if !added && j > lf && g.coeff[c] != zero(g.coeff[c])
             h_coeff[c] = g.coeff[c]
             push!(h_exp, c)
         end 
@@ -371,6 +374,9 @@ function comp(f::TropicalPuiseuxPoly, G::Vector{TropicalPuiseuxRational})
             end 
             #println("No of monomials: ", length(term.num.exp), " and ", length(term.den.exp))
             comp += val * term 
+        end 
+        if unique(comp.den.exp) != comp.den.exp
+            println("problem at f = ",f, "\n g = ", G, "\n")
         end 
         return comp
     end 

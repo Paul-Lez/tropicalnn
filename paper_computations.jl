@@ -13,48 +13,85 @@ include("mlp_to_trop.jl")
 Experiment 1: compute number of linear regions as the number of monomials varies.
 """
 function rational_map_linear_region_computations(n_variables, n_terms, n_samples)
-    output = []
+    output = Dict()
+    compute_times = Dict()
     for i in Base.eachindex(n_terms)
         println("Linear regions computation for ", n_terms[i], " variables \n")
-        n_lin = 0
+        sample_times = []
+        sample_n_regions = []
         for s in 1:n_samples 
-            println("Computation for sample ", s)
+            println("Sample ", s, " out of ", n_samples)
+            t1 = time()
+            # Pick random coefficients for numerator and denominator
             c_f = [QQ(Rational(j)) for j in rand(Float64, n_terms[i])]
             c_g = [QQ(Rational(j)) for j in rand(Float64, n_terms[i])]
+            # initialise exponent arrays
             exp_f = []
             exp_g = []
+            sizehint!(exp_f, n_terms[i])
+            sizehint!(exp_g, n_terms[i])
+            # pick random exponents
             for j in 1:n_terms[i]
                 push!(exp_f, [QQ(Rational(j)) for j in rand(Float64, n_variables)])
                 push!(exp_g, [QQ(Rational(j)) for j in rand(Float64, n_variables)])
             end
-            #println(exp_f)
+            # define numerator and denominator
             f = TropicalPuiseuxPoly(c_f, exp_f)
             g = TropicalPuiseuxPoly(c_g, exp_g)
-            n_lin += length(enum_linear_regions_rat(f, g, true))
+            # compute the number of linear regions of the rational function
+            n_reg = length(enum_linear_regions_rat(f, g, true))
+            t2 = time()
+            # store the runtime and number of linear regions 
+            push!(sample_times, t2-t1)
+            push!(sample_n_regions, n_reg)
             println(" ")
         end 
-        push!(output, n_lin / n_samples)
+        # compute averages 
+        sample_average_time = sum(sample_times) / n_samples
+        sample_average_region = sum(sample_n_regions) / n_samples
+        # store information in output dictionaries
+        compute_times["Computation " * string(i)] = (sample_average_time, sample_times)
+        output["Computation " * string(i)] = (sample_average_region / n_samples, sample_n_regions)
     end 
-    return output
-    #JLD2.save_object("output_array.jld2", output)
+    return output, compute_times
 end 
 
 """
 Experiment 2: Compute number of monomials that appear in the tropical Puiseux rational expression of a neural network and vary the architecture.
 """
-function monomial_counting(architectures)
+function monomial_counting(architectures, n_samples)
     # this array will store the number of monomials for each architecture
-    n_monomials = zeros(length(architectures))
+    n_monomials = Dict()
+    runtimes = Dict()
     for i in Base.eachindex(architectures)
-        # with a random neural network with a given architecture 
-        weights, bias, thresholds = random_mlp(architectures[i], false)
-        # compute the corresponding array of tropical Puiseux rational maps
-        trop = mlp_to_trop(weights, bias, thresholds)
-        # count the number of monomials that appear there, i.e. sum of monomials in numeral and denominator over all possible entries of the array
-        n_mon = sum([length(i.den.exp)+length(i.num.exp) for i in trop])
-        n_monomials[i] = n_mon
+        # these arrays store outcome of computation and runtime for each individual computation 
+        sample_times = []
+        sample_results = []
+        println("Currently working on architecture ", architectures[i])
+        for j in 1:n_samples
+            println("Sample ", j, " out of ", n_samples)
+            t1 = time()
+            # pick a random neural network with a given architecture 
+            weights, bias, thresholds = random_mlp(architectures[i], false)
+            # compute the corresponding array of tropical Puiseux rational maps
+            trop = mlp_to_trop(weights, bias, thresholds)
+            # count the number of monomials that appear there, i.e. sum of monomials in numeral and denominator over all possible entries of the array
+            n_mon = sum([length(i.den.exp)+length(i.num.exp) for i in trop])
+            t2 = time()
+            push!(sample_results, n_mon) 
+            push!(sample_times, t2-t1)
+        end 
+        # compute averages 
+        average_n_monomial = sum(sample_results) / n_samples
+        average_runtime = sum(sample_times) / n_samples 
+        # store data in output dictionaries
+        sample_output = Dict("Average number of monomials" => average_n_monomial, "Individual samples" => sample_results)
+        sample_runtime = Dict("Average runtime" => average_runtime, "Individual sample runtimes" => sample_times)
+        # add the sample dictionaries to the experiment output dictionaries
+        n_monomials["Architecture " * string(i)] = sample_output
+        runtimes["Architecture " * string(i)] = sample_runtime
     end
-    return n_monomials
+    return n_monomials, runtimes
 end 
 
 """

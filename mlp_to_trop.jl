@@ -7,26 +7,30 @@ include("rat_maps.jl")
 # takes in weight matrix A, bias term b and activation threshold t and outputs vector of tropical rational functions  
 function single_to_trop(A, b, t)
     G = Vector{TropicalPuiseuxRational}()
+    if size(A, 1) != length(b) || size(A, 1) != length(t) 
+        println("Dimensions of matrix don't agree with constant term or threshold")
+        return false
+    end 
     R = tropical_semiring(max)
     # first make sure that the entries of b are elements of the tropical semiring
     b = [R(Rational(i)) for i in b]
     # and same for t
     t = [R(Rational(i)) for i in t]
-    sizehint!(G, size(A, 2))
-    Threads.@threads for j in axes(A, 2)
+    sizehint!(G, size(A, 1))
+    for i in axes(A, 1)
         # first split the i-th line of A into its positive and negative components
-        pos = zeros(size(A, 1))
-        neg = zeros(size(A, 1))
-        Threads.@threads for i in axes(A, 1)
-            Threads.@inbounds pos[i] = max(A[i, j], 0)
-            Threads.@inbounds neg[i] = max(-A[i, j], 0)
+        pos = zeros(size(A, 2))
+        neg = zeros(size(A, 2))
+        for j in axes(A, 2)
+            pos[j] = max(A[i, j], 0)
+            neg[j] = max(-A[i, j], 0)
         end
         # the numerator is the monomial given by the positive part, with coeff b[i], plus the monomial given by the negative part 
         # with coeff t[i]
-        Threads.@inbounds num = TropicalPuiseuxMonomial(b[j], pos) + TropicalPuiseuxMonomial(t[j], neg)
+        num = TropicalPuiseuxMonomial(b[i], pos) + TropicalPuiseuxMonomial(t[i], neg)
         # the denominator is the monomila given by the negative part, with coeff the tropical multiplicative 
         # unit, i.e. 0
-        Threads.@inbounds den = TropicalPuiseuxMonomial(one(t[j]), neg)
+        den = TropicalPuiseuxMonomial(one(t[i]), neg)
         push!(G, num/den) 
     end 
     return G
@@ -44,12 +48,20 @@ outputs: an object of type TropicalPuiseuxRational.
 function mlp_to_trop(linear_maps, bias, thresholds)
     R = tropical_semiring(max)
     # initialisation: the first vector of tropical rational functions is just the identity function
-    output = TropicalPuiseuxRational_identity(size(linear_maps[1], 1), R(1))
+    output = TropicalPuiseuxRational_identity(size(linear_maps[1], 2), R(1))
     # iterate through the layers and compose variable output with the current layer at each step
     for i in Base.eachindex(linear_maps)
+        A = linear_maps[i]
+        b = bias[i]
+        t = thresholds[i]
+        #check sizes agree
+        if size(A, 1) != length(b) || size(A, 1) != length(t) 
+            # stricly speaking this should be implemented as an exception
+            println("Dimensions of matrix don't agree with constant term or threshold")
+        end 
         # compute the vector of tropical rational functions corresponding to the function 
         # max(Ax+b, t) where A = linear_maps[i], b = bias[i] and t = thresholds[i]
-        ith_tropical = single_to_trop(linear_maps[i], bias[i], thresholds[i])
+        ith_tropical = single_to_trop(A, b, t)
         # compose this with the output of the previous layer
         output = comp(ith_tropical, output)
     end 
@@ -65,12 +77,12 @@ inputs: dims: array of integers specifying the width of each layer
 """
 function random_mlp(dims, random_thresholds=false)
     # Use He initialisation, i.e. we sample weights with distribution N(0, sqrt(2/n))
-    weights = [rand(Normal(0, sqrt(2/dims[1])), dims[i], dims[i+1]) for i in 1:length(dims)-1]
-    biases = [rand(Normal(0, sqrt(2/dims[1])), dims[i+1]) for i in 1:length(dims)-1]
+    weights = [rand(Normal(0, sqrt(2/dims[1])), dims[i+1], dims[i]) for i in 1:length(dims)-1]
+    biases = [rand(Normal(0, sqrt(2/dims[1])), dims[i]) for i in 2:length(dims)]
     if random_thresholds
-        thresholds = [rand(dims[i+1]) for i in 1:length(dims)-1]
+        thresholds = [rand(dims[i]) for i in 2:length(dims)]
     else 
-        thresholds = [zeros(dims[i+1]) for i in 1:length(dims)-1]
+        thresholds = [zeros(dims[i]) for i in 2:length(dims)]
     end 
     return (weights, biases, thresholds)
 end 
@@ -127,8 +139,27 @@ function test_mlp_to_trop()
     filter!(e -> p.den.coeff[e] != zero(R), arr2)
     println(length(arr1))
     println(length(arr2))
+
+    weights, bias, thresholds = random_mlp([5, 5, 2], true)
+    trop = mlp_to_trop(weights, bias, thresholds)
+    println("done")
+    #println(trop)
+    #println(weights)
+    #@show length(trop)
+    R = tropical_semiring(max)
+
+    A1 = [3.0 -5.0;
+            7.0 8.0]
+
+    b1 = [R(3),
+        R(7)]
+
+    t1 = [ R(0),
+        R(0)]
+
+    g = single_to_trop(A1, b1, t1)
+
+    for i in g
+        println(string(i))
+    end 
 end 
-
-#weights, bias, thresholds = random_mlp([5, 5, 1], true)
-
-#print(mlp_to_trop(weights, bias, thresholds))
