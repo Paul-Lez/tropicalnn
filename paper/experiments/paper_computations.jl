@@ -101,19 +101,53 @@ end
 """
 Experiment 3: Compute the number of linear regions of a neural network as architecture varies
 """
-function untrained_linear_region_computations(architectures)
+function untrained_linear_region_computations(architectures, n_samples, save_file)
+    n_regions = Dict()
+    n_monomials = Dict()
+    runtimes = Dict()
     # this array will store the number of linear regions for each architecture
     n_regions = zeros(length(architectures))
     for i in Base.eachindex(architectures)
-        # with a random neural network with a given architecture 
-        weights, bias, thresholds = random_mlp(architectures[i], false)
-        # compute the tropical Puiseux rational map
-        trop = mlp_to_trop(weights, bias, thresholds)[1]
-        # count the number of linear regions of the network
-        n_reg = length(enum_linear_regions_rat(trop.num, trop.den))
-        n_regions[i] = n_reg
+        sample_times = []
+        sample_results_n_mon = []
+        sample_results_n_reg = []
+        for j in 1:n_samples
+            println("Currently working on architecture ", architectures[i])
+            #save_file*
+            save_file_name_trop = save_file*"architecture_" * string(i) * "_sample_" * string(j) * "_trop.jld2"
+            save_file_name_lin = save_file*"architecture_" * string(i) * "_sample_" * string(j) * "_lin.jld2"
+            t1 = time()
+            # with a random neural network with a given architecture 
+            weights, bias, thresholds = random_mlp(architectures[i], false)
+            # compute the tropical Puiseux rational map
+            trop = mlp_to_trop(weights, bias, thresholds)[1]
+            # count the number of linear regions of the network
+            reg = enum_linear_regions_rat(trop.num, trop.den)
+            n_reg = length(reg)
+            n_mon = length(trop.den.exp)+length(trop.num.exp)
+            t2 = time()
+            println("Found ", n_mon, " monomials, and ", n_reg, " linear regions.")
+            push!(sample_results_n_mon, n_mon) 
+            push!(sample_times, t2-t1)
+            push!(sample_results_n_reg, n_reg)
+            # save tropical rational function in file 
+            save_object(save_file_name_trop, trop)
+            save_object(save_file_name_lin, reg)
+        end 
+        # compute averages 
+        average_n_monomial = sum(sample_results_n_mon) / n_samples
+        average_runtime = sum(sample_times) / n_samples 
+        average_n_regions = sum(sample_results_n_reg) / n_samples
+        # store data in output dictionaries
+        sample_output_n_reg = Dict("Average number of monomials" => average_n_monomial, "Individual samples" => sample_results_n_mon)
+        sample_output_ne_mon =  Dict("Average number of linear regions" => average_n_regions, "Individual samples" => sample_results_n_reg)
+        sample_runtime = Dict("Average runtime" => average_runtime, "Individual sample runtimes" => sample_times)
+        # add the sample dictionaries to the experiment output dictionaries'
+        n_monomials["Architecture " * string(i)] = sample_output_ne_mon
+        runtimes["Architecture " * string(i)] = sample_runtime
+        n_regions["Architecture " * string(i)] = sample_output_n_reg 
     end
-    return n_regions 
+    return n_regions, n_monomials, runtimes
 end 
 
 
