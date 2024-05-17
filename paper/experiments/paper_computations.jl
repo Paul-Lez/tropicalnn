@@ -60,7 +60,7 @@ end
 Experiment 2: Compute number of monomials that appear in the tropical Puiseux rational expression of a neural network and vary the architecture.
 """
 function monomial_counting(architectures, n_samples)
-    # this array will store the number of monomials for each architecture
+    # this dictionary will store the number of monomials for each architecture
     n_monomials = Dict()
     runtimes = Dict()
     for i in Base.eachindex(architectures)
@@ -70,6 +70,7 @@ function monomial_counting(architectures, n_samples)
         println("Currently working on architecture ", architectures[i])
         for j in 1:n_samples
             println("Sample ", j, " out of ", n_samples)
+            save_file_name = "tropical_nn_architecture_" * string(i) * "_sample_" * string(j) * ".jld2"
             t1 = time()
             # pick a random neural network with a given architecture 
             weights, bias, thresholds = random_mlp(architectures[i], false)
@@ -78,8 +79,11 @@ function monomial_counting(architectures, n_samples)
             # count the number of monomials that appear there, i.e. sum of monomials in numeral and denominator over all possible entries of the array
             n_mon = sum([length(i.den.exp)+length(i.num.exp) for i in trop])
             t2 = time()
+            println("Found ", n_mon, " monomials.")
             push!(sample_results, n_mon) 
             push!(sample_times, t2-t1)
+            # save tropical rational function in file 
+            save_object("computation_objects/"*save_file_name, trop)
         end 
         # compute averages 
         average_n_monomial = sum(sample_results) / n_samples
@@ -87,7 +91,7 @@ function monomial_counting(architectures, n_samples)
         # store data in output dictionaries
         sample_output = Dict("Average number of monomials" => average_n_monomial, "Individual samples" => sample_results)
         sample_runtime = Dict("Average runtime" => average_runtime, "Individual sample runtimes" => sample_times)
-        # add the sample dictionaries to the experiment output dictionaries
+        # add the sample dictionaries to the experiment output dictionaries'
         n_monomials["Architecture " * string(i)] = sample_output
         runtimes["Architecture " * string(i)] = sample_runtime
     end

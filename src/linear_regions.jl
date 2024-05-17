@@ -47,7 +47,6 @@ function connected_closure(V, D)
     comp = Dict(V .=> V)
     for v in V 
         for w in V 
-            # TODO Paul: check that this update rule is actually the right one. Do we need to keep track of vertices that have already been visited?
             if v == w || (haskey(D, (v, w)) && D[(v, w)]) || (haskey(D, (w, v)) && D[(w, v)]) 
                 comp[w] = comp[v]
             end
