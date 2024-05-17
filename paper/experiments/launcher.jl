@@ -1,4 +1,4 @@
-#include("load_packages.jl")
+include("load_packages.jl")
 include("paper_computations.jl")
 using JSON3
 using Dates
@@ -25,7 +25,7 @@ run3 = false
 run4 = false
 
 # results of each experiment will be saved in a .json log file. By default the file name is "experiment_run_DATE_AND_TIME.json"
-results_file = "results/experiment_run_" *  string(Dates.now()) * ".json"
+results_file = "../../data/experiements_outputs/experiment_run_" *  string(Dates.now()) * ".json"
 results_dict = Dict()
 
 if run1
@@ -40,7 +40,7 @@ end
 
 if run2 
     t1 = time()
-    exp2, compute_times = monomial_counting(architectures, n_samples)
+    exp2, compute_times = monomial_counting(architectures, n_samples, "../../data/computation_objects/")
     t2 = time()
     println("Experiment 2 completed in ", t2 - t1, " seconds")
     experiment2 = Dict("output" => exp2, "input"=> architectures, "time" => t2 - t1, "compute times" => compute_times)

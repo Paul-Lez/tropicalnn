@@ -3,9 +3,9 @@ using Oscar
 using Combinatorics
 using Plots
 using JLD2
-include("rat_maps.jl")
-include("linear_regions.jl")
-include("mlp_to_trop.jl")
+include("../../src/rat_maps.jl")
+include("../../src/linear_regions.jl")
+include("../../src/mlp_to_trop.jl")
 
 # This file contains the tropical geometry experiments for the paper 
 
@@ -59,7 +59,7 @@ end
 """
 Experiment 2: Compute number of monomials that appear in the tropical Puiseux rational expression of a neural network and vary the architecture.
 """
-function monomial_counting(architectures, n_samples)
+function monomial_counting(architectures, n_samples, save_file)
     # this dictionary will store the number of monomials for each architecture
     n_monomials = Dict()
     runtimes = Dict()
@@ -70,7 +70,7 @@ function monomial_counting(architectures, n_samples)
         println("Currently working on architecture ", architectures[i])
         for j in 1:n_samples
             println("Sample ", j, " out of ", n_samples)
-            save_file_name = "tropical_nn_architecture_" * string(i) * "_sample_" * string(j) * ".jld2"
+            save_file_name = save_file*"tropical_nn_architecture_" * string(i) * "_sample_" * string(j) * ".jld2"
             t1 = time()
             # pick a random neural network with a given architecture 
             weights, bias, thresholds = random_mlp(architectures[i], false)
@@ -83,7 +83,7 @@ function monomial_counting(architectures, n_samples)
             push!(sample_results, n_mon) 
             push!(sample_times, t2-t1)
             # save tropical rational function in file 
-            save_object("computation_objects/"*save_file_name, trop)
+            save_object(save_file_name, trop)
         end 
         # compute averages 
         average_n_monomial = sum(sample_results) / n_samples
