@@ -10,7 +10,12 @@ using Dates
 n_variables = 4
 n_terms = [20] # , 50, 100, 200, 350, 500, 800, 1000
 n_samples = 4
-architectures = [[2, 2, 1]] 
+architectures = [[2, 2, 1], 
+                [3, 3, 1], 
+                [4, 4, 2, 1], 
+                [4, 3, 3, 2, 1], 
+                [4, 4, 3, 2, 1], 
+                [4, 4, 4, 2, 1]] 
 
 
 # modify these values to select which experiments to run. 

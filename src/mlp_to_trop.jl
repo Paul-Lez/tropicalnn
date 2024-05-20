@@ -5,8 +5,8 @@ using Distributions
 include("rat_maps.jl")
 
 # takes in weight matrix A, bias term b and activation threshold t and outputs vector of tropical rational functions  
-function single_to_trop(A, b, t)
-    G = Vector{TropicalPuiseuxRational}()
+function single_to_trop(A::Matrix{T}, b, t) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    G = Vector{TropicalPuiseuxRational{T}}()
     if size(A, 1) != length(b) || size(A, 1) != length(t) 
         println("Dimensions of matrix don't agree with constant term or threshold")
         return false
@@ -19,11 +19,11 @@ function single_to_trop(A, b, t)
     sizehint!(G, size(A, 1))
     for i in axes(A, 1)
         # first split the i-th line of A into its positive and negative components
-        pos = zeros(size(A, 2))
-        neg = zeros(size(A, 2))
+        pos = Vector{T}()
+        neg = Vector{T}()
         for j in axes(A, 2)
-            pos[j] = max(A[i, j], 0)
-            neg[j] = max(-A[i, j], 0)
+            push!(pos, max(A[i, j], 0))
+            push!(neg, max(-A[i, j], 0))
         end
         # the numerator is the monomial given by the positive part, with coeff b[i], plus the monomial given by the negative part 
         # with coeff t[i]
@@ -45,10 +45,11 @@ inputs: linear maps: an array containing the weight matrices of the neural netwo
         the form x => max(x,t).
 outputs: an object of type TropicalPuiseuxRational.
 """
-function mlp_to_trop(linear_maps, bias, thresholds)
+function mlp_to_trop(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     R = tropical_semiring(max)
     # initialisation: the first vector of tropical rational functions is just the identity function
-    output = TropicalPuiseuxRational_identity(size(linear_maps[1], 2), R(1))
+    #############output = TropicalPuiseuxRational_identity(size(linear_maps[1], 2), R(1))
+    output = single_to_trop(linear_maps[1], bias[1], thresholds[1])
     # iterate through the layers and compose variable output with the current layer at each step
     for i in Base.eachindex(linear_maps)
         A = linear_maps[i]
@@ -59,11 +60,13 @@ function mlp_to_trop(linear_maps, bias, thresholds)
             # stricly speaking this should be implemented as an exception
             println("Dimensions of matrix don't agree with constant term or threshold")
         end 
-        # compute the vector of tropical rational functions corresponding to the function 
-        # max(Ax+b, t) where A = linear_maps[i], b = bias[i] and t = thresholds[i]
-        ith_tropical = single_to_trop(A, b, t)
-        # compose this with the output of the previous layer
-        output = comp(ith_tropical, output)
+        if i != 1
+            # compute the vector of tropical rational functions corresponding to the function 
+            # max(Ax+b, t) where A = linear_maps[i], b = bias[i] and t = thresholds[i]
+            ith_tropical = single_to_trop(A, b, t)
+            # compose this with the output of the previous layer
+            output = comp(ith_tropical, output)
+        end 
     end 
     return output
 end 
@@ -75,14 +78,26 @@ inputs: dims: array of integers specifying the width of each layer
         random_thresholds: boolean. If set to true, the threshold of the activation function at each layer is chosen at random. Otherwise 
             the thresholds are all set to 0, i.e. all the activation functions are the ReLU function. Default value is false.
 """
-function random_mlp(dims, random_thresholds=false)
-    # Use He initialisation, i.e. we sample weights with distribution N(0, sqrt(2/n))
-    weights = [rand(Normal(0, sqrt(2/dims[1])), dims[i+1], dims[i]) for i in 1:length(dims)-1]
-    biases = [rand(Normal(0, sqrt(2/dims[1])), dims[i]) for i in 2:length(dims)]
-    if random_thresholds
-        thresholds = [rand(dims[i]) for i in 2:length(dims)]
-    else 
-        thresholds = [zeros(dims[i]) for i in 2:length(dims)]
+function random_mlp(dims, random_thresholds=false, symbolic=true)
+    # if symbolic is set to true then we work with symbolic fractions. 
+    if symbolic 
+        # Use He initialisation, i.e. we sample weights with distribution N(0, sqrt(2/n))
+        weights = [Rational{BigInt}.(rand(Normal(0, sqrt(2/dims[1])), dims[i+1], dims[i])) for i in 1:length(dims)-1]
+        biases = [Rational{BigInt}.(rand(Normal(0, sqrt(2/dims[1])), dims[i])) for i in 2:length(dims)]
+        if random_thresholds
+            thresholds = [Rational{BigInt}.(rand(dims[i])) for i in 2:length(dims)]
+        else 
+            thresholds = [Rational{BigInt}.(zeros(dims[i])) for i in 2:length(dims)]
+        end 
+    else # otherwise we work with Floats
+        # Use He initialisation, i.e. we sample weights with distribution N(0, sqrt(2/n))
+        weights = [rand(Normal(0, sqrt(2/dims[1])), dims[i+1], dims[i]) for i in 1:length(dims)-1]
+        biases = [rand(Normal(0, sqrt(2/dims[1])), dims[i]) for i in 2:length(dims)]
+        if random_thresholds
+            thresholds = [rand(dims[i]) for i in 2:length(dims)]
+        else 
+            thresholds = [zeros(dims[i]) for i in 2:length(dims)]
+        end 
     end 
     return (weights, biases, thresholds)
 end 
