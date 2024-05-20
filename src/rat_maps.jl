@@ -339,7 +339,7 @@ end
 
 function Base.:/(f::TropicalPuiseuxRational, g::TropicalPuiseuxRational)
     num = f.num*g.den 
-    den = f.den*g.den
+    den = f.den*g.num
     return TropicalPuiseuxRational(num, den)
 end 
 
