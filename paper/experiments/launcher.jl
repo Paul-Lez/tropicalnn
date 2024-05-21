@@ -20,8 +20,8 @@ architectures = [[2, 2, 1],
 
 # modify these values to select which experiments to run. 
 run1 = false
-run2 = true 
-run3 = false
+run2 = false
+run3 = true 
 run4 = false
 
 # results of each experiment will be saved in a .json log file. By default the file name is "experiment_run_DATE_AND_TIME.json"

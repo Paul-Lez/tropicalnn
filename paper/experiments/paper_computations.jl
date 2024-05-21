@@ -105,8 +105,6 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
     n_regions = Dict()
     n_monomials = Dict()
     runtimes = Dict()
-    # this array will store the number of linear regions for each architecture
-    n_regions = zeros(length(architectures))
     for i in Base.eachindex(architectures)
         sample_times = []
         sample_results_n_mon = []
@@ -122,7 +120,12 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
             # compute the tropical Puiseux rational map
             trop = mlp_to_trop(weights, bias, thresholds)[1]
             # count the number of linear regions of the network
-            reg = enum_linear_regions_rat(trop.num, trop.den)
+            reg = []
+            try 
+                reg = enum_linear_regions_rat(trop.num, trop.den)
+            catch e 
+                println("Oscar error ", e)
+            end 
             n_reg = length(reg)
             n_mon = length(trop.den.exp)+length(trop.num.exp)
             t2 = time()
@@ -139,8 +142,8 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
         average_runtime = sum(sample_times) / n_samples 
         average_n_regions = sum(sample_results_n_reg) / n_samples
         # store data in output dictionaries
-        sample_output_n_reg = Dict("Average number of monomials" => average_n_monomial, "Individual samples" => sample_results_n_mon)
-        sample_output_ne_mon =  Dict("Average number of linear regions" => average_n_regions, "Individual samples" => sample_results_n_reg)
+        sample_output_n_mon = Dict("Average number of monomials" => average_n_monomial, "Individual samples" => sample_results_n_mon)
+        sample_output_ne_reg =  Dict("Average number of linear regions" => average_n_regions, "Individual samples" => sample_results_n_reg)
         sample_runtime = Dict("Average runtime" => average_runtime, "Individual sample runtimes" => sample_times)
         # add the sample dictionaries to the experiment output dictionaries'
         n_monomials["Architecture " * string(i)] = sample_output_ne_mon
