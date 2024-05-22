@@ -57,7 +57,7 @@ function rational_map_linear_region_computations(n_variables, n_terms, n_samples
         sample_average_region = sum(sample_n_regions) / n_samples
         # store information in output dictionaries
         compute_times["Computation " * string(i)] = (sample_average_time, sample_times)
-        output["Computation " * string(i)] = (sample_average_region / n_samples, sample_n_regions)
+        output["Computation " * string(i)] = (sample_average_region, sample_n_regions)
     end 
     return output, compute_times
 end 
