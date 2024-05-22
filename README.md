@@ -14,9 +14,9 @@ Languages used:
 - Python.
 - Matlab.
 
-## Instructions for running the experiments 
+# Instructions for running the experiments 
 
-# Julia experiments
+## Julia experiments
 - Symbolic computations of linear regions of neural networks (section 5.2). Run file `experiment_launchers/experiment_5_2_symbolic.jl` in Julia using `julia experiment_launchers/experiment_5_2_symbolic.jl`.
   The output for this experiment is a `.json` file containing a dictionary with the followign entries:
   - `Linear regions`: a dictionary where the entry "Architecture i" is a dictionary storing the average number of linear regions obtained over all sampled neural networks with architecture specified by the i-th entry of the array `architectures`, and the number of linear regions for each individual sample.
@@ -31,16 +31,16 @@ Languages used:
   - `input`: the array `n_terms` which stores the number of monomials we are allowing for each computation.
   - `time`: the time each experiment took.
 
-# Python experiment 
+## Python experiment 
 - Numerical computation of linear regions of neural networks (section 5.2). Run the Jupyter notebook `experiment_launchers/deep_set_experiments.ipynb`.
 
-# Matlab experiments
+## Matlab experiments
 The MATLAB code for computing and estimating Hoffman constants of tropical Puiseux rational maps is based on the MATLAB code and scripts from https://www.andrew.cmu.edu/user/jfp/hoffman.html
 The MATLAB code requires the Optimization Toolbox is needed. A version of MATLAB 2023a or higher is recommended.
 The computation of the Hoffman constant, estimation of lower/upper bounds, comparison of computational time is bundled in function ```trop_test'''. To run the function, in MATLAB console do
-```trop_test(m_p,m_q,n)'''
-where ```m_p''' is the number of monomials in the numerator, ```m_q''' is the number of monomials in the denominator, and ```n''' is the dimension of variables.
+`trop_test(m_p,m_q,n)`
+where `m_p` is the number of monomials in the numerator, `m_q` is the number of monomials in the denominator, and `n` is the dimension of variables.
 To display the results, in MATLAB console do
-```disp_results'''
-All results shown in the paper are stored in ```.mat''' files and can be shown by ```disp_results''' function.
+`disp_results`
+All results shown in the paper are stored in `.mat` files and can be shown by `disp_results` function.
    
