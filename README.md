@@ -11,5 +11,4 @@ This repository countains some code for a project on tropical geometry and neura
 How to run the experiemnts: 
 - Symbolic computations of linear regions of neural networks (section 5.2). Run file `experiment_launchers/experiment_5_2_symbolic.jl` in Julia using `julia experiment_launchers/experiment_5_2_symbolic.jl`.
 - Numerical computation of linear regions of neural networks (section 5.2). Run the Jupyter notebook `experiment_launchers/deep_set_experiments.ipynb`.
-- Linear regions for rational functions (section 5.1). Run `experiment_5_1.jl` in Julia using `julia experiment_launchers/experiment_5_1.jl`.
-- etc
+- Linear regions for rational functions (section 5.1). Run `experiment_5_1_1.jl` (computation for 3 variables) and `experiment_5_1_2.jl` (computation for 4 variables) in Julia using `julia experiment_launchers/experiment_5_1_1.jl` and `julia experiment_launchers/experiment_5_1_1.jl`.
