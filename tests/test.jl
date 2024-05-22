@@ -68,3 +68,114 @@ aa = [R(0), R(1), R(1)]
 
 @show mlp_eval(w, b, t, a)
 @show [eval(i, aa) for i in trop]
+
+function test_rat_maps()
+
+    R = tropical_semiring(max)
+
+    f_coeff = [R(1), R(2)]
+    g_coeff = [R(2), R(1)]
+    h_coeff = [R(1), R(8)]
+    i_coeff = [R(1), R(8), R(7)]
+    j_coeff = [one(R)]
+    f_exp = [[1.0], [0.0]]
+    g_exp = [[1.0], [0.0]]
+    h_exp = [[1.2, 3.9], [4.8, 1.7]]
+    i_exp = [[0.0], [1.0], [2.0]]
+    j_exp = [[0.0]]
+
+    f = TropicalPuiseuxPoly(f_coeff, f_exp)
+    g = TropicalPuiseuxPoly(g_coeff, g_exp)
+    h = TropicalPuiseuxPoly(h_coeff, h_exp)
+    i = TropicalPuiseuxPoly(i_coeff, i_exp)
+    j = TropicalPuiseuxPoly(j_coeff, j_exp)
+
+    #println(string(f*j))
+    println(string(j*f))
+    #println(string(f^4))
+    #println(string(comp(i, f / g)))
+    #println(string(f/g + f/g))
+    #println(string(i+f))
+    #println(string(g+i))
+    #println(string(f*TropicalPuiseuxPoly_one(1, f)), " = ", string(f))
+
+    F = TropicalPuiseuxRational(f, g)
+    println(string(comp(h, [F, F])))
+end 
+
+######### Tests #############
+function test_mlp_to_trop()
+    R = tropical_semiring(max)
+    A1 = [[1.0, 1.0],
+        [2.0, 2.2 ]]
+
+    A2 = [[1], [2]]
+
+    b1 = [R(1),
+        R(2)]
+
+    b2 = [R(1)]
+
+    t1 = [R(2), 
+        R(2)]
+
+    t2 = [R(0)]
+
+    #println(single_to_trop(A1, b1, t1))
+    #p = mlp_to_trop([A1, A2], [b1, b2], [t1, t2])[1]
+    #println(string(p))
+
+    d1 = 5
+    d2 = 2
+    d3 = 2
+    d4 = 10
+    d5 = 1
+
+    A1 = rand(d1, d2)
+    A2 = rand(d2, d3)
+    A3 = rand(d3, d4)
+    A4 = rand(d4, d5)
+
+    b1 = [R(QQ(Rational(i))) for i in rand(Float32, d2)]
+    b2 = [R(QQ(Rational(i))) for i in rand(Float32, d3)]
+    b3 = [R(QQ(Rational(i))) for i in rand(Float32, d4)]
+    b4 = [R(QQ(Rational(i))) for i in rand(Float32, d5)]
+
+    t1 = [R(QQ(Rational(i))) for i in rand(Float32,d2)]
+    t2 = [R(QQ(Rational(i))) for i in rand(Float32, d3)]
+    t3 = [R(QQ(Rational(i))) for i in rand(Float32, d4)]
+    t4 = [R(QQ(Rational(i))) for i in rand(Float32, d5)]
+
+    p = mlp_to_trop([A1, A2, A3, A4], [b1, b2, b3, b4], [t1, t2, t3, t4])[1] #+ mlp_to_trop([A1, A2, A3, A4], [b1, b2, b3, b4], [t1, t2, t3, t4])[2]
+    arr1 = copy(p.num.exp)
+    arr2 = copy(p.den.exp)
+    println(length(arr1))
+    println(length(arr2))
+    filter!(e -> p.num.coeff[e] != zero(R), arr1)
+    filter!(e -> p.den.coeff[e] != zero(R), arr2)
+    println(length(arr1))
+    println(length(arr2))
+
+    weights, bias, thresholds = random_mlp([5, 5, 2], true)
+    trop = mlp_to_trop(weights, bias, thresholds)
+    println("done")
+    #println(trop)
+    #println(weights)
+    #@show length(trop)
+    R = tropical_semiring(max)
+
+    A1 = [3.0 -5.0;
+            7.0 8.0]
+
+    b1 = [R(3),
+        R(7)]
+
+    t1 = [ R(0),
+        R(0)]
+
+    g = single_to_trop(A1, b1, t1)
+
+    for i in g
+        println(string(i))
+    end 
+end 

@@ -464,39 +464,3 @@ end
 function comp(F::Vector{TropicalPuiseuxRational{T}}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     return [comp(f, G) for f in F]
 end 
-
-###### TESTS ###########
-
-function test_rat_maps()
-
-    R = tropical_semiring(max)
-
-    f_coeff = [R(1), R(2)]
-    g_coeff = [R(2), R(1)]
-    h_coeff = [R(1), R(8)]
-    i_coeff = [R(1), R(8), R(7)]
-    j_coeff = [one(R)]
-    f_exp = [[1.0], [0.0]]
-    g_exp = [[1.0], [0.0]]
-    h_exp = [[1.2, 3.9], [4.8, 1.7]]
-    i_exp = [[0.0], [1.0], [2.0]]
-    j_exp = [[0.0]]
-
-    f = TropicalPuiseuxPoly(f_coeff, f_exp)
-    g = TropicalPuiseuxPoly(g_coeff, g_exp)
-    h = TropicalPuiseuxPoly(h_coeff, h_exp)
-    i = TropicalPuiseuxPoly(i_coeff, i_exp)
-    j = TropicalPuiseuxPoly(j_coeff, j_exp)
-
-    #println(string(f*j))
-    println(string(j*f))
-    #println(string(f^4))
-    #println(string(comp(i, f / g)))
-    #println(string(f/g + f/g))
-    #println(string(i+f))
-    #println(string(g+i))
-    #println(string(f*TropicalPuiseuxPoly_one(1, f)), " = ", string(f))
-
-    F = TropicalPuiseuxRational(f, g)
-    println(string(comp(h, [F, F])))
-end 
