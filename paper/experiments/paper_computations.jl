@@ -149,17 +149,12 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
         average_n_regions = sum(sample_results_n_reg) / n_samples
         # store data in output dictionaries
         sample_output_n_mon = Dict("Average number of monomials" => average_n_monomial, "Individual samples" => sample_results_n_mon)
-        sample_output_ne_reg =  Dict("Average number of linear regions" => average_n_regions, "Individual samples" => sample_results_n_reg)
+        sample_output_n_reg =  Dict("Average number of linear regions" => average_n_regions, "Individual samples" => sample_results_n_reg)
         sample_runtime = Dict("Average runtime" => average_runtime, "Individual sample runtimes" => sample_times)
         # add the sample dictionaries to the experiment output dictionaries'
-        n_monomials["Architecture " * string(i)] = sample_output_ne_mon
+        n_monomials["Architecture " * string(i)] = sample_output_n_mon
         runtimes["Architecture " * string(i)] = sample_runtime
         n_regions["Architecture " * string(i)] = sample_output_n_reg 
     end
     return n_regions, n_monomials, runtimes
-end 
-
-
-function trained_linear_region_computation()
-    return false
 end 

@@ -4,8 +4,11 @@ using Combinatorics
 using Distributions
 include("rat_maps.jl")
 
-# takes in weight matrix A, bias term b and activation threshold t and outputs vector of tropical rational functions  
 function single_to_trop(A::Matrix{T}, b, t) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+"""
+Inputs: weight matrix A, bias term b and activation threshold t
+Outputs: vector of tropical Puiseux rational functions that express the function max(Ax+b, t) as a tropical Puiseux rational function.
+""" 
     G = Vector{TropicalPuiseuxRational{T}}()
     if size(A, 1) != length(b) || size(A, 1) != length(t) 
         println("Dimensions of matrix don't agree with constant term or threshold")
@@ -36,6 +39,7 @@ function single_to_trop(A::Matrix{T}, b, t) where T<:Union{Oscar.scalar_types, R
     return G
 end     
 
+function mlp_to_trop(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
 """
 mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
 
@@ -45,7 +49,6 @@ inputs: linear maps: an array containing the weight matrices of the neural netwo
         the form x => max(x,t).
 outputs: an object of type TropicalPuiseuxRational.
 """
-function mlp_to_trop(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     R = tropical_semiring(max)
     # initialisation: the first vector of tropical rational functions is just the identity function
     output = single_to_trop(linear_maps[1], bias[1], thresholds[1])
@@ -70,14 +73,14 @@ function mlp_to_trop(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:
     return output
 end 
 
-"""
-random_mlp(dims, random_thresholds) returns a multilayer perceptron with architecture specified by the array dims and random weights.
-
-inputs: dims: array of integers specifying the width of each layer
-        random_thresholds: boolean. If set to true, the threshold of the activation function at each layer is chosen at random. Otherwise 
-            the thresholds are all set to 0, i.e. all the activation functions are the ReLU function. Default value is false.
-"""
 function random_mlp(dims, random_thresholds=false, symbolic=true)
+    """
+    random_mlp(dims, random_thresholds) returns a multilayer perceptron with architecture specified by the array dims and random weights.
+    
+    inputs: dims: array of integers specifying the width of each layer
+            random_thresholds: boolean. If set to true, the threshold of the activation function at each layer is chosen at random. Otherwise 
+                the thresholds are all set to 0, i.e. all the activation functions are the ReLU function. Default value is false.
+    """
     # if symbolic is set to true then we work with symbolic fractions. 
     if symbolic 
         # Use He initialisation, i.e. we sample weights with distribution N(0, sqrt(2/n))

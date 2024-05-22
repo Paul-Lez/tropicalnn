@@ -9,6 +9,10 @@ function to_Float64(v::Vector)
 end 
 
 function polyhedron(f::TropicalPuiseuxPoly, i)
+    """
+    Input: tropical Puiseux polynomial f and index i 
+    Ouput: polyhedron corresponding to points where f is given by the the linear map corresponding to the i-th monomial of f.
+    """
     # take A to be the matrix as in the overleaf document
     A = mapreduce(permutedims, vcat, [to_Float64(f.exp[j]) - to_Float64(f.exp[i]) for j in eachindex(f)])
     # and ditto for b. First however we need to convert elements of b to Floats since they are elements are the tropical semiring.
@@ -55,11 +59,13 @@ function connected_closure(V, D)
     return unique([v for (_, v) in comp])
 end
 
-#TODO Paul: work out what we want to have as output when there are repetitions
 function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly, verbose=false)
     """
-    Should output the linear regions of a tropical Puiseux rational function. 
-
+    Computes the number of linear regions of a tropical Puiseux rational function f/g
+    Inputs: Tropical Puiseux polynomials f and g 
+            boolean verbose
+    Ouput: array containing linear regions of f/g represented by polyhedra. In the case where 
+            the linear region is a union of such polyhedra, we pick one of the polyhedra in the union to represent this.
     """
     # first, compute the linear regions of f and g. 
     if verbose
