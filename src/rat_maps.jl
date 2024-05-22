@@ -100,14 +100,12 @@ function TropicalPuiseuxRational_one(n, f)
     return TropicalPuiseuxRational(TropicalPuiseuxPoly_one(n, f.num), TropicalPuiseuxPoly_one(n, f.num))
 end 
 
-# todo. how do we want to keep track of the sorting?
 function Base.:/(f::TropicalPuiseuxPoly{T}, g::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     f = TropicalPuiseuxPoly(f.coeff, f.exp)
     g = TropicalPuiseuxPoly(g.coeff, g.exp)
     return TropicalPuiseuxRational(f, g)
 end 
 
-# This currently is buggy for sums of monomials...
 function Base.:+(f::TropicalPuiseuxPoly{T}, g::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     """
     Takes two TropicalPuiseuxPoly whose exponents are lexicographically ordered and outputs the sum with 
@@ -177,8 +175,6 @@ function Base.:+(f::TropicalPuiseuxPoly{T}, g::TropicalPuiseuxPoly{T}) where T<:
     return h
 end 
 
-# Lexicographic product of lexicographically ordered Puiseux polynomials
-# This is currently buggy and should be fixed.
 function Base.:*(f::TropicalPuiseuxPoly{T}, g::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     prod = TropicalPuiseuxPoly_zero(nvars(f), f)
     # if f = a_0 + ... + a_n T^n and g = b_0 + ... + b_n then the product is 
