@@ -11,9 +11,9 @@ This repository countains some code for a project on tropical geometry and neura
 How to run the experiements: 
 - Symbolic computations of linear regions of neural networks (section 5.2). Run file `experiment_launchers/experiment_5_2_symbolic.jl` in Julia using `julia experiment_launchers/experiment_5_2_symbolic.jl`.
   The output for this experiment is a `.json` file containing a dictionary with the followign entries:
-  - `Linear regions`: a dictionary where the entry "Architecture 1" is a dictionary storing the average number of linear regions obtained over all sampled neural networks with architecture specified by the i-th entry of the array `architectures`, and the number of linear regions for each individual sample.
-  - `Monomials`: a dictionary where the entry "Architecture 1" is a dictionary storing the average number of monomials obtained over all sampled neural networks with architecture specified by the i-th entry of the array `architectures`, and the number of monomials for each individual sample.
-  - `Compute times`: a dictionary where the entry "Architecture 1" is a dictionary storing the average runtime for the computation over all sampled neural networks with architecture specified by the i-th entry of the array `architectures`, and the runtimes for each individual sample. 
+  - `Linear regions`: a dictionary where the entry "Architecture i" is a dictionary storing the average number of linear regions obtained over all sampled neural networks with architecture specified by the i-th entry of the array `architectures`, and the number of linear regions for each individual sample.
+  - `Monomials`: a dictionary where the entry "Architecture i" is a dictionary storing the average number of monomials obtained over all sampled neural networks with architecture specified by the i-th entry of the array `architectures`, and the number of monomials for each individual sample.
+  - `Compute times`: a dictionary where the entry "Architecture i" is a dictionary storing the average runtime for the computation over all sampled neural networks with architecture specified by the i-th entry of the array `architectures`, and the runtimes for each individual sample. 
   - `input`: the array `architectures` from the lauch file containing the architectures that were used as inputs in the experiment.
   - `time`: the time each experiment took.
 - Numerical computation of linear regions of neural networks (section 5.2). Run the Jupyter notebook `experiment_launchers/deep_set_experiments.ipynb`.
