@@ -48,7 +48,6 @@ outputs: an object of type TropicalPuiseuxRational.
 function mlp_to_trop(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     R = tropical_semiring(max)
     # initialisation: the first vector of tropical rational functions is just the identity function
-    #############output = TropicalPuiseuxRational_identity(size(linear_maps[1], 2), R(1))
     output = single_to_trop(linear_maps[1], bias[1], thresholds[1])
     # iterate through the layers and compose variable output with the current layer at each step
     for i in Base.eachindex(linear_maps)
@@ -102,7 +101,7 @@ function random_mlp(dims, random_thresholds=false, symbolic=true)
     return (weights, biases, thresholds)
 end 
 
-######### Unit tests #############
+######### Tests #############
 function test_mlp_to_trop()
     R = tropical_semiring(max)
     A1 = [[1.0, 1.0],

@@ -437,7 +437,6 @@ function comp(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) 
     if length(G) != nvars(f)
         println("Number of variables issue")  
     else 
-        #println("computing composition")
         comp = TropicalPuiseuxRational_zero(nvars(G[1]), G[1])
         for (key, val) in f.coeff
             term = TropicalPuiseuxRational_one(nvars(G[1]), G[1])
@@ -445,11 +444,7 @@ function comp(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) 
                 #println("here", i)
                 term *= G[i]^key[i]  
             end 
-            #println("No of monomials: ", length(term.num.exp), " and ", length(term.den.exp))
             comp += val * term 
-        end 
-        if unique(comp.den.exp) != comp.den.exp
-            println("problem at f = ",f, "\n g = ", G, "\n")
         end 
         return comp
     end 
@@ -470,7 +465,7 @@ function comp(F::Vector{TropicalPuiseuxRational{T}}, G::Vector{TropicalPuiseuxRa
     return [comp(f, G) for f in F]
 end 
 
-###### UNIT TESTS ###########
+###### TESTS ###########
 
 function test_rat_maps()
 

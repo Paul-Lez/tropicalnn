@@ -79,10 +79,7 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
                 # we only need to do the checks on linear regions that are attained by f and g
                 if lin_f[i][2] && lin_g[j][2]
                     # check if the polytopes intersect
-                    #######t1 = time()
                     poly = Oscar.intersect(lin_f[i][1], lin_g[j][1])
-                    ###########t2 = time()
-                    #########println(t2-t1)
                     # if they intersect on a large enough region then add this to the list of linear maps that arise in f/g
                     if Oscar.is_feasible(poly) && Oscar.dim(poly) == nvars(f)
                         Threads.@inbounds linear_map[poly] = [Rational(f.coeff[f.exp[i]]) - Rational(g.coeff[g.exp[j]]), f.exp[i] - g.exp[j]]
