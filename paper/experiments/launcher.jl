@@ -7,9 +7,9 @@ using Dates
 
 
 # parameters for the experiements
-n_variables = 4
-n_terms = [20] # , 50, 100, 200, 350, 500, 800, 1000
-n_samples = 4
+n_variables = 3
+n_terms = [20, 50, 100, 200, 350, 500, 800, 1000]
+n_samples = 1
 architectures = [[2, 2, 1], 
                 [3, 3, 1], 
                 [4, 4, 2, 1], 
@@ -19,9 +19,9 @@ architectures = [[2, 2, 1],
 
 
 # modify these values to select which experiments to run. 
-run1 = false
+run1 = true
 run2 = false
-run3 = true 
+run3 = false
 run4 = false
 
 # results of each experiment will be saved in a .json log file. By default the file name is "experiment_run_DATE_AND_TIME.json"

@@ -26,20 +26,26 @@ function rational_map_linear_region_computations(n_variables, n_terms, n_samples
             c_f = [QQ(Rational(j)) for j in rand(Float64, n_terms[i])]
             c_g = [QQ(Rational(j)) for j in rand(Float64, n_terms[i])]
             # initialise exponent arrays
-            exp_f = []
-            exp_g = []
+            exp_f = Vector{Vector{Rational{Int}}}()
+            exp_g = Vector{Vector{Rational{Int}}}()
             sizehint!(exp_f, n_terms[i])
             sizehint!(exp_g, n_terms[i])
             # pick random exponents
             for j in 1:n_terms[i]
-                push!(exp_f, [QQ(Rational(j)) for j in rand(Float64, n_variables)])
-                push!(exp_g, [QQ(Rational(j)) for j in rand(Float64, n_variables)])
+                new_exp_f = Vector{Rational{Int}}([Rational(j) for j in rand(Float64, n_variables)])
+                new_exp_g = Vector{Rational{Int}}([Rational(j) for j in rand(Float64, n_variables)])
+                push!(exp_f, new_exp_f)
+                push!(exp_g, new_exp_g)
             end
-            # define numerator and denominator
             f = TropicalPuiseuxPoly(c_f, exp_f)
             g = TropicalPuiseuxPoly(c_g, exp_g)
             # compute the number of linear regions of the rational function
-            n_reg = length(enum_linear_regions_rat(f, g, true))
+            n_reg = 0
+            try 
+                n_reg = length(enum_linear_regions_rat(f, g, true))
+            catch e
+                println("Oscar error")
+            end 
             t2 = time()
             # store the runtime and number of linear regions 
             push!(sample_times, t2-t1)
