@@ -103,3 +103,39 @@ function random_mlp(dims, random_thresholds=false, symbolic=true)
     end 
     return (weights, biases, thresholds)
 end 
+
+function mlp_to_trop_with_dedup(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    """
+    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+    
+    inputs: linear maps: an array containing the weight matrices of the neural network. 
+            bias: an array containing the biases at each layer
+            thresholds: an array containing the threshold of the activation function at each layer, i.e. the number t such that the activation is of
+            the form x => max(x,t).
+    outputs: an object of type TropicalPuiseuxRational.
+    """
+        R = tropical_semiring(max)
+        # initialisation: the first vector of tropical rational functions is just the identity function
+        output = single_to_trop(linear_maps[1], bias[1], thresholds[1])
+        output = dedup_monomials(output)
+        # iterate through the layers and compose variable output with the current layer at each step
+        for i in Base.eachindex(linear_maps)
+            A = linear_maps[i]
+            b = bias[i]
+            t = thresholds[i]
+            #check sizes agree
+            if size(A, 1) != length(b) || size(A, 1) != length(t) 
+                # stricly speaking this should be implemented as an exception
+                println("Dimensions of matrix don't agree with constant term or threshold")
+            end 
+            if i != 1
+                # compute the vector of tropical rational functions corresponding to the function 
+                # max(Ax+b, t) where A = linear_maps[i], b = bias[i] and t = thresholds[i]
+                ith_tropical = single_to_trop(A, b, t)
+                # compose this with the output of the previous layer
+                output = comp(ith_tropical, output)
+                output = dedup_monomials(output)
+            end 
+        end 
+        return output
+    end 

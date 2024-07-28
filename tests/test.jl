@@ -1,5 +1,7 @@
+using BenchmarkTools
 include("../src/linear_regions.jl")
 include("../src/mlp_to_trop.jl")
+include("../src/mlp_to_trop_with_elim.jl")
 
 ### UNIT TESTS ####
 
@@ -52,22 +54,61 @@ end
 
 R = tropical_semiring(max) 
 
-w, b, t = random_mlp([3, 3, 2, 2, 2])
-#@show w, b, t = random_mlp([3, 1])
+N_samples = 10
+avg_red = 0
+avg = 0
 
-#A = [1.0  0.0  1.0]
-#b = [1.0]
-#t = [0.0]
+for i in 1:N_samples
+    println("Sample ", i)
+    w, b, t = random_mlp([3, 2, 2, 2, 1])
+    #@show w, b, t = random_mlp([3, 1])
 
-a = [0, 1, 1]
+    #A = [1.0  0.0  1.0]
+    #b = [1.0]
+    #t = [0.0]
 
-#trop = single_to_trop(w[1], b[1], t[1])
-trop = mlp_to_trop(w, b, t)
+    a = [0, 1, 1]
 
-aa = [R(0), R(1), R(1)]
+    #trop = single_to_trop(w[1], b[1], t[1])
+    println("computing tropical form of random MLP")
+    t1 = time()
+    trop1 = mlp_to_trop_with_elim(w, b, t)
+    t2 = time()
+    #trop2 = mlp_to_trop_with_dedup(w, b, t)
+    t3 = time()
+    #trop3 = monomial_elim(trop2)
+    #t4 = time()
+    #trop4 = mlp_to_trop_with_quasi_elim(w, b, t)
+    t5 = time()
+    trop5 = mlp_to_trop_with_double_elim(w, b, t)
+    t6 = time()
 
-@show mlp_eval(w, b, t, a)
-@show [eval(i, aa) for i in trop]
+    println("Computation with elim took ", t2 - t1)
+    #println("Computation (vanilla) took ", t3 - t2)
+    #println("Computation with one-shot elim took ", t4 - t2)
+    #println("Computation with quasi-elim took ", t5 - t4)
+    println("Computation with double-elim took ", t6 - t5)
+    
+    n_red =  monomial_count(trop1)
+    #n =  monomial_count(trop2)
+    println("Reduced form ", n_red)
+    #println("Non reduced form ", n)
+    #println("Reduced form, one-shot approach", monomial_count(trop3))
+    #println("Reduced form, quasi-elim approach ", monomial_count(trop4))
+    println("Reduced form, double-elim approach ", monomial_count(trop5))
+    #global avg_red += n_red / N_samples
+    #global avg += n / N_samples
+
+    println("_________________________________")
+end 
+
+#println(avg_red, "    ", avg)
+
+
+#aa = [R(0), R(1), R(1)]
+
+#@show mlp_eval(w, b, t, a)
+#@show [eval(i, aa) for i in trop]
 
 function test_rat_maps()
 

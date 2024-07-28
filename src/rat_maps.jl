@@ -460,3 +460,39 @@ end
 function comp(F::Vector{TropicalPuiseuxRational{T}}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     return [comp(f, G) for f in F]
 end 
+
+# remove all zero monomials from the expression of f
+function dedup_monomials(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    new_exp::Vector{Vector{T}} = []
+    new_coeff=Dict()
+    tropical_zero = zero(f.coeff[f.exp[1]])
+    for i in f.exp
+        if i != tropical_zero
+            push!(new_exp, i)
+            new_coeff[i] = f.coeff[i]
+        else 
+            println("found a zero")
+        end
+    end 
+    return TropicalPuiseuxPoly(new_coeff, new_exp)
+end 
+
+function dedup_monomials(f::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return TropicalPuiseuxRational(dedup_monomials(f.num), dedup_monomials(f.den))
+end 
+
+function dedup_monomials(F::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return [dedup_monomials(f) for f in F]
+end 
+
+function monomial_count(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return length(f.exp)
+end 
+
+function monomial_count(f::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return monomial_count(f.num) + monomial_count(f.den)
+end 
+
+function monomial_count(F::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return sum([monomial_count(f) for f in F])
+end 

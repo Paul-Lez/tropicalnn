@@ -6,6 +6,7 @@ using JLD2
 include("../../src/rat_maps.jl")
 include("../../src/linear_regions.jl")
 include("../../src/mlp_to_trop.jl")
+include("../../src/mlp_to_trop_with_elim.jl")
 
 # This file contains the tropical geometry experiments for the paper 
 
@@ -124,7 +125,7 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
             # with a random neural network with a given architecture 
             weights, bias, thresholds = random_mlp(architectures[i], false)
             # compute the tropical Puiseux rational map
-            trop = mlp_to_trop(weights, bias, thresholds)[1]
+            trop = mlp_to_trop_with_quasi_elim(weights, bias, thresholds)[1]
             # count the number of linear regions of the network
             reg = []
             try 

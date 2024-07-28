@@ -7,12 +7,15 @@ using Dates
 results_file = "experiment_5_1_run_" *  string(Dates.now()) * ".json"
 
 # experimental parameters
-n_samples = 20
+n_samples = 1
 architectures = [[2, 2, 1], 
                 [4, 3, 1], 
                 [4, 4, 1], 
                 [3, 2, 2, 1], 
-                [3, 3, 2, 1]] 
+                [3, 3, 2, 1], 
+                [3, 3, 3, 1], 
+                
+                ] 
 
 t1 = time()
 exp3_lin, exp3_mon, compute_times = untrained_linear_region_computations(architectures, n_samples, "")
