@@ -69,7 +69,7 @@ function n_components(V, D)
         visited[k] = true
         for p in V
             #println(p)
-            if !Visited[p] && ((haskey(D, (k, p)) && D[(k, p)]) || (haskey(D, (p, k)) && D[(p, k)]))
+            if !visited[p] && ((haskey(D, (k, p)) && D[(k, p)]) || (haskey(D, (p, k)) && D[(p, k)]))
                 depth_first_search(p)
             end 
         end 
@@ -123,10 +123,8 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
         if verbose
             println("Checking for repetitions of linear maps")
         end 
-        println(linear_map)
         # check for repetitions
         linear_map_unique = unique([l for (key, l) in linear_map])
-        println(linear_map_unique)
         if length(linear_map) == length(linear_map_unique)
             return linear_map, [], false
         else 
