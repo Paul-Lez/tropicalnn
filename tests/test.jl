@@ -60,7 +60,7 @@ avg = 0
 
 for i in 1:N_samples
     println("Sample ", i)
-    w, b, t = random_mlp([3, 2, 2, 2, 1])
+    w, b, t = random_mlp([3, 2, 2, 1])
     #@show w, b, t = random_mlp([3, 1])
 
     #A = [1.0  0.0  1.0]
@@ -80,7 +80,7 @@ for i in 1:N_samples
     #t4 = time()
     #trop4 = mlp_to_trop_with_quasi_elim(w, b, t)
     t5 = time()
-    trop5 = mlp_to_trop_with_double_elim(w, b, t)
+    trop5 = mlp_to_trop_with_strong_elim(w, b, t)
     t6 = time()
 
     println("Computation with elim took ", t2 - t1)

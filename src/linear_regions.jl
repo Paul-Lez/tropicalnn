@@ -59,6 +59,30 @@ function connected_closure(V, D)
     return unique([v for (_, v) in comp])
 end
 
+function n_components(V, D)
+    count = 0
+    visited = Dict()
+    for v in V 
+        visited[v] = false
+    end 
+    function depth_first_search(k)
+        visited[k] = true
+        for p in V
+            #println(p)
+            if !Visited[p] && ((haskey(D, (k, p)) && D[(k, p)]) || (haskey(D, (p, k)) && D[(p, k)]))
+                depth_first_search(p)
+            end 
+        end 
+    end 
+    for p in V
+        if !visited[p]
+            depth_first_search(p)
+            count += 1
+        end 
+    end 
+    return count
+end 
+
 function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly, verbose=false)
     """
     Computes the number of linear regions of a tropical Puiseux rational function f/g
@@ -80,15 +104,18 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
         end 
         linear_map = Dict()
         # We need to check for pairwise intersection of each polytope, by iterating over
-        Threads.@threads for i in eachindex(f)
-            Threads.@threads for j in eachindex(g)
+        #Threads.@threads 
+        for i in eachindex(f)
+            #Threads.@threads 
+            for j in eachindex(g)
                 # we only need to do the checks on linear regions that are attained by f and g
                 if lin_f[i][2] && lin_g[j][2]
                     # check if the polytopes intersect
                     poly = Oscar.intersect(lin_f[i][1], lin_g[j][1])
                     # if they intersect on a large enough region then add this to the list of linear maps that arise in f/g
                     if Oscar.is_feasible(poly) && Oscar.dim(poly) == nvars(f)
-                        Threads.@inbounds linear_map[poly] = [Rational(f.coeff[f.exp[i]]) - Rational(g.coeff[g.exp[j]]), f.exp[i] - g.exp[j]]
+                        #Threads.@inbounds 
+                        linear_map[poly] = [Rational(f.coeff[f.exp[i]]) - Rational(g.coeff[g.exp[j]]), f.exp[i] - g.exp[j]]
                     end 
                 end 
             end 
@@ -96,8 +123,10 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
         if verbose
             println("Checking for repetitions of linear maps")
         end 
+        println(linear_map)
         # check for repetitions
         linear_map_unique = unique([l for (key, l) in linear_map])
+        println(linear_map_unique)
         if length(linear_map) == length(linear_map_unique)
             return linear_map, [], false
         else 
@@ -134,7 +163,21 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
                     has_intersect[(poly1, poly2)] = Oscar.is_feasible(intesection)
                 end
                 # now find transitive closure of the relation given by dictionary has_intersect.
-                append!(lin_regions, connected_closure(vals, has_intersect))
+                
+
+                ###########################################
+                ### TODO: remove the testing stuff
+                
+                #t1 = time()
+                #cl = connected_closure(vals, has_intersect)
+                #t2 = time()
+                test = n_components(vals, has_intersect)
+                #println("Experimental result: ", test)
+                #t3 = time()
+                #println("Times are ", t2 - t1, " and ", t3 - t2)
+
+                ###########################################
+                append!(lin_regions, test)
             end 
         end
     end
