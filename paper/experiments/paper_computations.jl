@@ -130,19 +130,19 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
             reg = []
             try 
                 reg = enum_linear_regions_rat(trop.num, trop.den)
+                n_reg = length(reg)
+                n_mon = length(trop.den.exp)+length(trop.num.exp)
+                t2 = time()
+                println("Found ", n_mon, " monomials, and ", n_reg, " linear regions.")
+                push!(sample_results_n_mon, n_mon) 
+                push!(sample_times, t2-t1)
+                push!(sample_results_n_reg, n_reg)
+                # save tropical rational function in file 
+                save_object(save_file_name_trop, trop)
+                save_object(save_file_name_lin, reg)
             catch e 
                 println("Oscar error ", e)
-            end 
-            n_reg = length(reg)
-            n_mon = length(trop.den.exp)+length(trop.num.exp)
-            t2 = time()
-            println("Found ", n_mon, " monomials, and ", n_reg, " linear regions.")
-            push!(sample_results_n_mon, n_mon) 
-            push!(sample_times, t2-t1)
-            push!(sample_results_n_reg, n_reg)
-            # save tropical rational function in file 
-            save_object(save_file_name_trop, trop)
-            save_object(save_file_name_lin, reg)
+            end   
         end 
         # compute averages 
         average_n_monomial = sum(sample_results_n_mon) / n_samples
