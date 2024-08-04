@@ -225,6 +225,7 @@ function mlp_to_trop_with_quicksum_with_strong_elim(linear_maps::Vector{Matrix{T
             A = linear_maps[i]
             b = bias[i]
             t = thresholds[i]
+            println("  Currently working on layer ", i)
             #check sizes agree
             if size(A, 1) != length(b) || size(A, 1) != length(t) 
                 # stricly speaking this should be implemented as an exception
@@ -233,10 +234,14 @@ function mlp_to_trop_with_quicksum_with_strong_elim(linear_maps::Vector{Matrix{T
             if i != 1
                 # compute the vector of tropical rational functions corresponding to the function 
                 # max(Ax+b, t) where A = linear_maps[i], b = bias[i] and t = thresholds[i]
+                println("   Tropicalising the linear map")
                 ith_tropical = single_to_trop(A, b, t)
                 # compose this with the output of the previous layer
+                println("   Calculating the composition")
                 output = comp_with_quicksum(ith_tropical, output)
+                println("   Eliminating useless monomials")
                 output = monomial_strong_elim(output)
+                println("   Monomial count at layer ", i, " is ", monomial_count(output))
             end 
         end 
     return output

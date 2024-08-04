@@ -122,6 +122,7 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
             save_file_name_trop = save_file*"architecture_" * string(i) * "_sample_" * string(j) * "_trop.jld2"
             save_file_name_lin = save_file*"architecture_" * string(i) * "_sample_" * string(j) * "_lin.jld2"
             t1 = time()
+            println(" Initialising random MLP and computing tropical form.")
             # with a random neural network with a given architecture 
             weights, bias, thresholds = random_mlp(architectures[i], false)
             # compute the tropical Puiseux rational map
@@ -129,11 +130,12 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
             # count the number of linear regions of the network
             reg = []
             try 
+                println(" Computing linear regions")
                 reg = enum_linear_regions_rat(trop.num, trop.den)
                 n_reg = length(reg)
                 n_mon = length(trop.den.exp)+length(trop.num.exp)
                 t2 = time()
-                println("Found ", n_mon, " monomials, and ", n_reg, " linear regions.")
+                println(" Found ", n_mon, " monomials, and ", n_reg, " linear regions.")
                 push!(sample_results_n_mon, n_mon) 
                 push!(sample_times, t2-t1)
                 push!(sample_results_n_reg, n_reg)
