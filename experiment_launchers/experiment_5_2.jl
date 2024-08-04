@@ -7,13 +7,10 @@ using Dates
 results_file = "experiment_5_1_run_" *  string(Dates.now()) * ".json"
 
 # experimental parameters
-n_samples = 1
-architectures = [[2, 2, 1], 
-                [4, 3, 1], 
-                [4, 4, 1], 
-                [3, 2, 2, 1], 
-                [3, 3, 2, 1], 
-                [3, 3, 3, 1],  
+n_samples = 2
+architectures = [   #[5, 3, 1], 
+                    #[5, 3, 2, 1], 
+                    [150, 8, 1]
                 ] 
 
 t1 = time()

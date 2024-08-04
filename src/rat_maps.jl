@@ -1,6 +1,10 @@
 using Pkg 
 using Oscar
 using Combinatorics
+using RecursiveArrayTools
+
+
+####################### BASIC CONSTRUCTIONS ##################################
 
 struct TropicalPuiseuxPoly{T}
     coeff::Dict
@@ -100,10 +104,140 @@ function TropicalPuiseuxRational_one(n, f)
     return TropicalPuiseuxRational(TropicalPuiseuxPoly_one(n, f.num), TropicalPuiseuxPoly_one(n, f.num))
 end 
 
+##################################################################################
+
+####################### STRING REPRESENTATIONS ###################################
+
+function Base.string(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    str = ""
+    for i in eachindex(f)
+        # in dimension 1 we omit subscripts on the variables
+        if nvars(f)==1
+            if i == 1 
+                str *= repr(f.coeff[f.exp[i]]) * "*T^" * repr(f.exp[i][1])
+            else 
+                str *= " + " * repr(f.coeff[f.exp[i]]) * "*T^" * repr(f.exp[i][1])
+            end 
+        else 
+            if i == 1
+                str *= repr(f.coeff[f.exp[i]]) 
+            else 
+                str *= " + " * repr(f.coeff[f.exp[i]]) 
+            end 
+            exp = f.exp[i]
+            for j in Base.eachindex(exp)
+                str *= " * T_" * repr(j) * " ^ " * repr(exp[j])   
+            end 
+        end
+    end
+    return str
+end 
+
+function Base.repr(f::TropicalPuiseuxPoly)
+    return string(f)
+end 
+
+function Base.string(f::TropicalPuiseuxRational)
+    return string(f.num) * " / " * string(f.den)
+end 
+
+######################################################################
+
+########################## EVALUATION ################################
+
+# univariate case 
+function eval(f::TropicalPuiseuxPoly, a)
+    comp = zero(a)
+    for (key, val) in f.coeff
+        comp += val * a^key[1]
+    end 
+    return comp
+end 
+
+# univariate case
+function eval(f::TropicalPuiseuxRational, a)
+    return eval(f.num, a) / eval(f.den, a)
+end  
+
+# multivariate case
+function eval(f::TropicalPuiseuxPoly{T}, a::Vector) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    #R = tropical_semiring(max)
+    ev = zero(a[1])
+    for (exp, coeff) in f.coeff
+        term = one(a[1])
+        for i in Base.eachindex(a)
+            term *= a[i]^exp[i]
+        end
+        ev += coeff * term
+    end 
+    return ev
+end  
+
+# multivariate case
+function eval(f::TropicalPuiseuxRational{T}, a::Vector) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    n::TropicalSemiringElem{typeof(max)} = eval(f.num, a) 
+    m::TropicalSemiringElem{typeof(max)} = eval(f.den, a) 
+    return n / m
+end 
+
+function eval(F::Vector{TropicalPuiseuxRational{T}}, a::Vector) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return [eval(f, a) for f in F]
+end 
+
+# # evaluation in the multivariate case
+# function eval(f::TropicalPuiseuxPoly, G::Vector)
+#     comp = zero(G[1])
+#     for (key, val) in f.coeff
+#         term = one(a[1])
+#         for i in Base.eachindex(G)
+#             term *= G[i]^key[i]    
+#         end 
+#         comp += val * term 
+#     end 
+#     return comp
+# end 
+
+function eval_temporary(f::TropicalPuiseuxPoly{T}, G::Vector{Rational{T}}) where T<:Integer
+    comp = -Rational{BigInt}(Base.Inf)
+    for (key, val) in f.coeff
+        term = 0
+        for i in Base.eachindex(G)
+            term += G[i]*key[i]    
+        end 
+        comp = max(Rational{BigInt}(QQ(val)) + term, comp)
+    end 
+    return comp
+end
+
+function eval_temporary(f::TropicalPuiseuxPoly, G::Vector{TropicalSemiringElem{typeof(max)}})
+    G_new = [Float64(Rational(G[i])) for i in Base.eachindex(G)]
+    return eval_temporary(f, G_new)
+end
+
+function eval_temporary(f::TropicalPuiseuxRational, G::Vector)
+    return eval_temporary(f.num, G) - eval_temporary(f.den, G)
+end 
+
+######################################################################
+
+################ ARITHMETIC OPERATIONS ###############################
+
 function Base.:/(f::TropicalPuiseuxPoly{T}, g::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    f = TropicalPuiseuxPoly(f.coeff, f.exp)
-    g = TropicalPuiseuxPoly(g.coeff, g.exp)
     return TropicalPuiseuxRational(f, g)
+end 
+
+function quicksum(F::Vector{TropicalPuiseuxPoly{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    R = tropical_semiring(max)
+    terms = reduce(vcat, [f.exp for f in F])
+    h_exp::Vector{Vector{T}} = terms
+    #terms = unique(flatview(VectorOfArray([f.exp for f in F])))
+    #sort!(terms)
+    h_coeff = Dict()
+    for exp in terms
+        h_coeff[exp] = sum([f.coeff[exp] for f in F if haskey(f.coeff, exp)])
+    end 
+    # this is set to true because we don't need sorting with this algo?
+    return TropicalPuiseuxPoly(h_coeff, h_exp, true)
 end 
 
 function Base.:+(f::TropicalPuiseuxPoly{T}, g::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
@@ -193,38 +327,103 @@ function Base.:*(f::TropicalPuiseuxPoly{T}, g::TropicalPuiseuxPoly{T}) where T<:
     return prod 
 end 
 
-function Base.string(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    str = ""
-    for i in eachindex(f)
-        # in dimension 1 we omit subscripts on the variables
-        if nvars(f)==1
-            if i == 1 
-                str *= repr(f.coeff[f.exp[i]]) * "*T^" * repr(f.exp[i][1])
-            else 
-                str *= " + " * repr(f.coeff[f.exp[i]]) * "*T^" * repr(f.exp[i][1])
-            end 
-        else 
-            if i == 1
-                str *= repr(f.coeff[f.exp[i]]) 
-            else 
-                str *= " + " * repr(f.coeff[f.exp[i]]) 
-            end 
-            exp = f.exp[i]
-            for j in Base.eachindex(exp)
-                str *= " * T_" * repr(j) * " ^ " * repr(exp[j])   
-            end 
-        end
-    end
-    return str
+function mul_with_quicksum(f::TropicalPuiseuxPoly{T}, g::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    # if f = a_0 + ... + a_n T^n and g = b_0 + ... + b_n then the product is 
+    # the sum of all the b_i T^i * f
+    summands = Vector{TropicalPuiseuxPoly{T}}()
+    sizehint!(summands, length(g.exp))
+    for i in eachindex(g)
+        term_coeff = Dict()
+        # compute the coefficients of b_i T^i * f
+        for (key, elem) in f.coeff
+            #println(nvars(f), " ", nvars(g))
+            term_coeff[key+g.exp[i]] = g.coeff[g.exp[i]] * elem
+        end 
+        # compute the exponenets of b_i T^i * f
+        term_exp = [g.exp[i] + f.exp[j] for j in eachindex(f)]
+        push!(summands, TropicalPuiseuxPoly(term_coeff, term_exp, true))
+        #println(string(TropicalPuiseuxPoly(term_coeff, term_exp, true)))
+    end 
+    return quicksum(summands)
 end 
 
-function Base.repr(f::TropicalPuiseuxPoly)
-    return string(f)
+function Base.:+(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    num = f.num * g.den + f.den * g.num 
+    den = f.den * g.den 
+    return TropicalPuiseuxRational(num, den) 
 end 
 
-function Base.string(f::TropicalPuiseuxRational)
-    return string(f.num) * " / " * string(f.den)
+function add_with_quicksum(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    num = mul_with_quicksum(f.num, g.den) + mul_with_quicksum(f.den, g.num)
+    den = mul_with_quicksum(f.den, g.den) 
+    return TropicalPuiseuxRational(num, den) 
 end 
+
+function mul_with_quicksum(F::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    mul = TropicalPuiseuxPuiseux_one(nvars(f), f)
+    for f in F 
+        mul = mul_with_quicksum(mul, f)
+    end 
+    return mul
+end 
+
+function mul_with_quicksum(F::Vector{TropicalPuiseuxPoly{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    mul = TropicalPuiseuxPoly_one(nvars(F[1]), F[1])
+    for f in F 
+        mul = mul_with_quicksum(mul, f)
+    end 
+    return mul
+end 
+
+function quicksum(F::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    denoms = [f.den for f in F]
+    den = mul_with_quicksum(denoms)
+    summand = Vector{TropicalPuiseuxPoly{T}}()
+    sizehint!(summand, length(F))
+    for i in Base.eachindex(F)
+        push!(summand, mul_with_quicksum([j != i ? denoms[j] : F[i].num for j in Base.eachindex(F)]))
+    end 
+    return TropicalPuiseuxRational(quicksum(summand), den) 
+end 
+
+
+function Base.:*(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    num = f.num * g.num 
+    den = f.den * g.den 
+    return TropicalPuiseuxRational(num, den)
+end 
+
+function mul_with_quicksum(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    num = mul_with_quicksum(f.num, g.num) 
+    den = mul_with_quicksum(f.den, g.den) 
+    return TropicalPuiseuxRational(num, den)
+end 
+
+function Base.:/(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    num = f.num*g.den 
+    den = f.den*g.num
+    return TropicalPuiseuxRational(num, den)
+end 
+
+function div_with_quicksum(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    num = mul_with_quicksum(f.num, g.den) 
+    den = mul_with_quicksum(f.den, g.num)
+    return TropicalPuiseuxRational(num, den)
+end 
+
+function Base.:*(a::TropicalSemiringElem, f::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return TropicalPuiseuxRational(a*f.num, f.den)
+end 
+
+function Base.:^(a::TropicalSemiringElem{typeof(max)}, b::TropicalSemiringElem{typeof(max)})
+    R = tropical_semiring(max)
+    return R(Rational(a)*Rational(b))
+end 
+
+function Base.:^(a::TropicalSemiringElem{typeof(max)}, b::Rational{T}) where T<:Integer 
+    R = tropical_semiring(max)
+    return R(Rational(a)*b)
+end
 
 # exponentiation of a tropical Puiseux polynomial by a positive rational
 function Base.:^(f::TropicalPuiseuxPoly, rat::Float64)
@@ -235,7 +434,7 @@ function Base.:^(f::TropicalPuiseuxPoly, rat::Float64)
         new_f_exp = copy(f.exp)
         new_f_exp = rat * new_f_exp 
         for (key, elem) in f.coeff
-            new_f_coeff[rat*key] = elem
+            new_f_coeff[rat*key] = elem^rat
         end 
         return TropicalPuiseuxPoly(new_f_coeff, new_f_exp, true)
     end 
@@ -255,7 +454,7 @@ function Base.:^(f::TropicalPuiseuxPoly{T}, int::Int64) where T<:Union{Oscar.sca
     new_f_exp::Vector{Vector{T}} = copy(f.exp)
     new_f_exp = int * new_f_exp 
     for (key, elem) in f.coeff
-        new_f_coeff[int*key] = elem
+        new_f_coeff[int*key] = elem^int
     end 
     return TropicalPuiseuxPoly(new_f_coeff, new_f_exp, true)
 end 
@@ -265,7 +464,7 @@ function Base.:^(f::TropicalPuiseuxPoly, int::Rational{T}) where T<:Integer
     new_f_exp = convert(Vector{Vector{Rational{BigInt}}}, f.exp)
     new_f_exp::Vector{Vector{Rational{BigInt}}} = Vector{Rational{BigInt}}.(int * new_f_exp) 
     for (key, elem) in f.coeff
-        new_f_coeff[int*key] = elem
+        new_f_coeff[int*key] = elem^int
     end 
     return TropicalPuiseuxPoly(new_f_coeff, new_f_exp, true)
 end 
@@ -295,138 +494,46 @@ function Base.:*(a::TropicalSemiringElem, f::TropicalPuiseuxPoly{T}) where T<:Un
         new_f_coeff[f.exp[i]] = a*f.coeff[f.exp[i]]
     end 
     return TropicalPuiseuxPoly(new_f_coeff, new_f_exp, true)
-end 
-
-# univariate case 
-function eval(f::TropicalPuiseuxPoly, a)
-    comp = zero(a)
-    for (key, val) in f.coeff
-        comp += val * a^key[1]
-    end 
-    return comp
-end 
-
-# univariate case
-function eval(f::TropicalPuiseuxRational, a)
-    return eval(f.num, a) / eval(f.den, a)
-end  
-
-# multivariate case
-function eval(f::TropicalPuiseuxPoly, a::Vector)
-    comp = zero(a[1])
-    for (key, val) in f.coeff
-        for i in eachindex(a)
-            comp += val * a[i]^key[i]
-        end 
-    end 
-    return comp
-end  
-
-# multivariate case
-function eval(f::TropicalPuiseuxRational, a::Vector)
-    return eval(f.num, a) / eval(f.den, a)
-end 
-
-function Base.:^(a::TropicalSemiringElem{typeof(max)}, b::TropicalSemiringElem{typeof(max)})
-    R = tropical_semiring(max)
-    return R(Rational(a)*Rational(b))
-end 
-
-function Base.:^(a::TropicalSemiringElem{typeof(max)}, b::Rational{T}) where T<:Integer 
-    R = tropical_semiring(max)
-    return R(Rational(a)*b)
-end 
-
-# evaluation in the multivariate case
-function eval(f::TropicalPuiseuxPoly, G::Vector)
-    comp = zero(G[1])
-    for (key, val) in f.coeff
-        term = one(a[1])
-        for i in Base.eachindex(G)
-            term *= G[i]^key[i]    
-        end 
-        comp += val * term 
-    end 
-    return comp
-end 
-
-function eval_temporary(f::TropicalPuiseuxPoly, G::Vector{Rational{T}}) where T<:Integer
-    comp = -Rational{BigInt}(Base.Inf)
-    for (key, val) in f.coeff
-        term = 0
-        for i in Base.eachindex(G)
-            term += G[i]*key[i]    
-        end 
-        comp = max(Rational{BigInt}(QQ(val)) + term, comp)
-    end 
-    return comp
 end
 
-function eval_temporary(f::TropicalPuiseuxPoly, G::Vector{TropicalSemiringElem{typeof(max)}})
-    G_new = [Float64(Rational(G[i])) for i in Base.eachindex(G)]
-    return eval_temporary(f, G_new)
-end
+####################################################################
 
-function eval_temporary(f::TropicalPuiseuxRational, G::Vector)
-    return eval_temporary(f.num, G) - eval_temporary(f.den, G)
-end 
+############# CODE FOR COMPOSITION ##################################
 
 # Here f needs to be univariate 
-function comp(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
-    comp = TropicalPuiseuxPoly_zero(nvars(g), f)
-    for (key, val) in f.coeff
-        comp += val * g^key[1]
-    end 
-    return comp
-end 
+# function comp(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly)
+#     comp = TropicalPuiseuxPoly_zero(nvars(g), f)
+#     for (key, val) in f.coeff
+#         comp += val * g^key[1]
+#     end 
+#     return comp
+# end 
 
 # composition in the multivariate case
 function comp(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxPoly{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    comp = TropicalPuiseuxPoly_zero(nvars(G[0]), f)
-    for (key, val) in f.coeff
-        term = TropicalPuiseuxPoly_one(nvars(G[0]), f)
-        for i in eachindex(G)
-            term *= G[i]^key[i]    
+    comp = TropicalPuiseuxPoly_zero(nvars(G[1]), f)
+    # evaluate monomial-wise
+    for (exp, coeff) in f.coeff
+        term = TropicalPuiseuxPoly_one(nvars(G[1]), f)
+        for i in Base.eachindex(G)
+            # multiply each variable in the monomial 
+            term *= G[i]^exp[i]
         end 
-        comp += val * term 
+        # println(string(coeff * term))
+        # println("term ", exp, " ", coeff)
+        comp += coeff * term
     end 
     return comp
-end 
+end
 
-function Base.:+(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    num = f.num * g.den + f.den * g.num 
-    den = f.den * g.den 
-    return TropicalPuiseuxRational(num, den) 
-end 
-
-# implement me 
-function Base.:*(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    num = f.num * g.num 
-    den = f.den * g.den 
-    return TropicalPuiseuxRational(num, den)
-end 
-
-function Base.:/(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    num = f.num*g.den 
-    den = f.den*g.num
-    return TropicalPuiseuxRational(num, den)
-end 
-
-function Base.:*(a::TropicalSemiringElem, f::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    return TropicalPuiseuxRational(a*f.num, f.den)
-end 
-
-#univariate case
-function comp(f::TropicalPuiseuxPoly, g::TropicalPuiseuxRational)
-    comp = TropicalPuiseuxRational_zero(nvars(g), g)
-    for (key, val) in f.coeff
-        #println("here")
-        comp += val * g^key[1]
-        #println("g = ", string(g), " ", "pow g = ", string(g^key[1]), " key = ", key[1])
-        #println(" val * g^key[1] = ", string(val * g^key[1]), " sum = ", string(comp))
-    end 
-    return comp
-end 
+# #univariate case
+# function comp(f::TropicalPuiseuxPoly, g::TropicalPuiseuxRational)
+#     comp = TropicalPuiseuxRational_zero(nvars(g), g)
+#     for (key, val) in f.coeff
+#         comp += val * g^key[1]
+#     end
+#     return comp
+# end
 
 # multivariate case
 function comp(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
@@ -437,29 +544,89 @@ function comp(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) 
         for (key, val) in f.coeff
             term = TropicalPuiseuxRational_one(nvars(G[1]), G[1])
             for i in Base.eachindex(G)
-                #println("here", i)
-                term *= G[i]^key[i]  
-            end 
+                term *= G[i]^key[i]
+            end
             comp += val * term 
         end 
         return comp
-    end 
-end 
+    end
+end
+
+function comp_with_quicksum(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    if length(G) != nvars(f)
+        println("Number of variables issue")  
+    else 
+        summands = Vector{TropicalPuiseuxRational{T}}()
+        sizehint!(summands, length(f.exp))
+        comp = TropicalPuiseuxRational_zero(nvars(G[1]), G[1])
+        for (key, val) in f.coeff
+            term = TropicalPuiseuxRational_one(nvars(G[1]), G[1])
+            for i in Base.eachindex(G)
+                term = mul_with_quicksum(term, G[i]^key[i])
+            end
+            push!(summands, val * term)
+        end 
+        return quicksum(summands)
+    end
+end
+
+function comp_with_mul_with_quicksum(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    if length(G) != nvars(f)
+        println("Number of variables issue")  
+    else 
+        comp = TropicalPuiseuxRational_zero(nvars(G[1]), G[1])
+        for (key, val) in f.coeff
+            term = TropicalPuiseuxRational_one(nvars(G[1]), G[1])
+            for i in Base.eachindex(G)
+                term = mul_with_quicksum(term, G[i]^key[i])
+            end
+            comp = add_with_quicksum(comp, val * term)
+        end 
+        return comp
+    end
+end
 
 # implement me 
-function comp(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    return comp(f.num, g) / comp(f.den, g)
-end
+# function comp(f::TropicalPuiseuxRational{T}, g::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+#     return comp(f.num, g) / comp(f.den, g)
+# end
 
 # multivariate case 
 function comp(f::TropicalPuiseuxRational{T}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
-    return comp(f.num, G) / comp(f.den, G)
+    num =  comp(f.num, G)
+    den = comp(f.den, G)
+    val = num / den 
+    return val 
+end 
+
+function comp_with_quicksum(f::TropicalPuiseuxRational{T}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    num =  comp_with_quicksum(f.num, G)
+    den = comp_with_quicksum(f.den, G)
+    val = div_with_quicksum(num, den) 
+    return val 
+end 
+
+function comp_with_mul_with_quicksum(f::TropicalPuiseuxRational{T}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    num =  comp_with_mul_with_quicksum(f.num, G)
+    den = comp_with_mul_with_quicksum(f.den, G)
+    val = div_with_quicksum(num, den) 
+    return val 
 end 
 
 # double multivariate case 
 function comp(F::Vector{TropicalPuiseuxRational{T}}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     return [comp(f, G) for f in F]
 end 
+
+function comp_with_quicksum(F::Vector{TropicalPuiseuxRational{T}}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return [comp_with_quicksum(f, G) for f in F]
+end 
+
+function comp_with_mul_with_quicksum(F::Vector{TropicalPuiseuxRational{T}}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
+    return [comp_with_mul_with_quicksum(f, G) for f in F]
+end 
+
+#########################################################################################################
 
 # remove all zero monomials from the expression of f
 function dedup_monomials(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
@@ -495,4 +662,4 @@ end
 
 function monomial_count(F::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     return sum([monomial_count(f) for f in F])
-end 
+end
