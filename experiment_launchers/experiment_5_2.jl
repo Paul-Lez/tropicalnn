@@ -10,7 +10,7 @@ results_file = "experiment_5_1_run_" *  string(Dates.now()) * ".json"
 n_samples = 2
 architectures = [   #[5, 3, 1], 
                     #[5, 3, 2, 1], 
-                    [150, 8, 1]
+                    [2, 2, 1]
                 ] 
 
 t1 = time()

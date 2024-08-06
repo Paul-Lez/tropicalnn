@@ -175,7 +175,12 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
                 #println("Times are ", t2 - t1, " and ", t3 - t2)
 
                 ###########################################
-                append!(lin_regions, test)
+                # Temporary: we're only interested in the number of connected components for the experiments rather than the 
+                # exact polyhedra, so instead of returning the data of the polyhedra, we just return an arbitrary list 
+                # that has length the number of connected components. This is messy but means making the connected 
+                # closure search a bit easier.
+                linear_regions_repeat = repeat([1], test)
+                append!(lin_regions, linear_regions_repeat)
             end 
         end
     end
