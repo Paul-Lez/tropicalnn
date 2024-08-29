@@ -552,6 +552,7 @@ function comp(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) 
     end
 end
 
+## Uses the rational quicksum
 function comp_with_quicksum(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     if length(G) != nvars(f)
         println("Number of variables issue")  
@@ -570,6 +571,7 @@ function comp_with_quicksum(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseux
     end
 end
 
+## Uses the polynomial quicksum but not the rational quicksum
 function comp_with_mul_with_quicksum(f::TropicalPuiseuxPoly{T}, G::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     if length(G) != nvars(f)
         println("Number of variables issue")  

@@ -80,13 +80,14 @@ function monomial_counting(architectures, n_samples, save_file)
             save_file_name = save_file*"tropical_nn_architecture_" * string(i) * "_sample_" * string(j) * ".jld2"
             t1 = time()
             # pick a random neural network with a given architecture 
+            println(" Initialising random MLP and computing tropical form.")
             weights, bias, thresholds = random_mlp(architectures[i], false)
             # compute the corresponding array of tropical Puiseux rational maps
-            trop = mlp_to_trop(weights, bias, thresholds)
+            trop = mlp_to_trop_with_quicksum_with_strong_elim(weights, bias, thresholds)[1]
             # count the number of monomials that appear there, i.e. sum of monomials in numeral and denominator over all possible entries of the array
-            n_mon = sum([length(i.den.exp)+length(i.num.exp) for i in trop])
+            n_mon = monomial_count(trop)
             t2 = time()
-            println("Found ", n_mon, " monomials.")
+            println(" Found ", n_mon, " monomials.")
             push!(sample_results, n_mon) 
             push!(sample_times, t2-t1)
             # save tropical rational function in file 
@@ -144,6 +145,7 @@ function untrained_linear_region_computations(architectures, n_samples, save_fil
                 save_object(save_file_name_lin, reg)
             catch e 
                 println("Oscar error ", e)
+                save_object("problematic_object.jld2", trop)
             end   
         end 
         # compute averages 

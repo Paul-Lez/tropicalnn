@@ -137,7 +137,7 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
     # if there are no repetitions, then the linear regions are just the non-empty intersections of linear regions of f and linear regions of g
     if !exists_reps   
         lin_regions = collect(keys(linear_map))
-    # if there are repetitions then we will need to find connected components of the union of the polytopes on which repetitons occur.
+    # if there are repetitions then we will need to find connected components of the union of the polytopes on which repetitions occur.
     else
         println("Linear repetition mode")
         if verbose 

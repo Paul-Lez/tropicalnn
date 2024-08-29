@@ -8,17 +8,15 @@ results_file = "experiment_5_1_run_" *  string(Dates.now()) * ".json"
 
 # experimental parameters
 n_samples = 10
-architectures = [   [2, 3, 1], 
-                    [3, 3, 1], 
-                    [3, 4, 1], 
-                    [2, 3, 2, 1]
+architectures = [   [2, 4, 2, 1], 
+                    [2, 6, 1]
                 ] 
 
 t1 = time()
-exp3_lin, exp3_mon, compute_times = untrained_linear_region_computations(architectures, n_samples, "")
+exp3_mon, compute_times = monomial_counting(architectures, n_samples, "")
 t2 = time()
 println("Experiment completed in ", t2 - t1, " seconds")
-experiment = Dict("Linear regions" => exp3_lin, "Monomials" => exp3_mon, "Compute times" => compute_times, "input"=> architectures, "time" => t2 - t1)
+experiment = Dict("Monomials" => exp3_mon, "Compute times" => compute_times, "input"=> architectures, "time" => t2 - t1)
 
 open(results_file, "w") do io
     JSON3.pretty(io, experiment)
