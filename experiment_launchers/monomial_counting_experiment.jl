@@ -8,8 +8,10 @@ results_file = "experiment_5_1_run_" *  string(Dates.now()) * ".json"
 
 # experimental parameters
 n_samples = 10
-architectures = [   [2, 4, 2, 1], 
-                    [2, 6, 1]
+architectures = [   [2, 4, 4, 1], 
+                    [2, 8, 1], 
+                    [10, 4, 1],
+                    [10, 2, 2, 1]
                 ] 
 
 t1 = time()
