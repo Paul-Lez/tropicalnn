@@ -33,7 +33,7 @@ function monomial_strong_elim(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.sc
     new_coeff = Dict()
     for i in Base.eachindex(f.exp)
         poly = polyhedron(f, i)
-        if Oscar.is_feasible(poly) && Oscar.dim(poly) == nvars(f)
+        if Oscar.is_fulldimensional(poly) #Oscar.is_feasible(poly) && Oscar.dim(poly) == nvars(f)
             e = f.exp[i] 
             push!(new_exp, e)
             new_coeff[e] = f.coeff[e]
