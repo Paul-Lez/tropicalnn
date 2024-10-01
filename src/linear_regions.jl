@@ -8,6 +8,7 @@ function to_Float64(v::Vector)
     return [Float64(w) for w in v]
 end 
 
+# Outputs the polyhedron of the i-th monomial of a tropical polynomial 
 function polyhedron(f::TropicalPuiseuxPoly, i)
     """
     Input: tropical Puiseux polynomial f and index i 
@@ -27,7 +28,7 @@ function polyhedron(f::TropicalPuiseuxPoly, i)
     end 
 end 
 
-# return a list of the linear regions of f
+# return a list of the linear regions of a tropical polynomial f
 function enum_linear_regions(f::TropicalPuiseuxPoly)
     """
     enum_linear_regions(f) outputs an array of tuples (poly, bool) indexed by the same set as the exponents of f. poly is the linear region corresponding to the exponent, and bool is true when this region is nonemtpy.
@@ -59,6 +60,8 @@ function connected_closure(V, D)
     return unique([v for (_, v) in comp])
 end
 
+# Computes the number of equivalence classes of the transitive closure of a 
+# relation by running depth first search
 function n_components(V, D)
     count = 0
     visited = Dict()
@@ -83,6 +86,7 @@ function n_components(V, D)
     return count
 end 
 
+# Compute the number of linear regions of a tropical rational function
 function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly, verbose=false)
     """
     Computes the number of linear regions of a tropical Puiseux rational function f/g

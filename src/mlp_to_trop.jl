@@ -109,7 +109,7 @@ end
 
 function mlp_to_trop_with_mul_with_quicksum(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     """
-    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron. Uses mul_with_quicksum version of multiplication for tropical objects.
     
     inputs: linear maps: an array containing the weight matrices of the neural network. 
             bias: an array containing the biases at each layer
@@ -174,7 +174,7 @@ end
 
 function mlp_to_trop_with_dedup(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     """
-    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron. Runs a deduplication function to remove duplicate monomials at each layer.
     
     inputs: linear maps: an array containing the weight matrices of the neural network. 
             bias: an array containing the biases at each layer

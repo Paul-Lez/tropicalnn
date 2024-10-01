@@ -12,21 +12,22 @@ function monomial_elim(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_ty
             e = f.exp[i] 
             push!(new_exp, e)
             new_coeff[e] = f.coeff[e]
-        #else 
-         #   println("Caught useless monomial")
         end 
     end 
     return TropicalPuiseuxPoly(new_coeff, new_exp)
 end 
 
+# removes redundant monomials from rational function
 function monomial_elim(f::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     return TropicalPuiseuxRational(monomial_elim(f.num), monomial_elim(f.den))
 end
 
+# removes redundant monomials from vector of rational functions
 function monomial_elim(F::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     return [monomial_elim(f) for f in F]
 end
 
+# removes redundant monomials from a tropical polynomial 
 function monomial_strong_elim(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     new_exp = Vector{Vector{T}}()
     sizehint!(new_exp, length(f.exp))
@@ -44,23 +45,25 @@ function monomial_strong_elim(f::TropicalPuiseuxPoly{T}) where T<:Union{Oscar.sc
     return TropicalPuiseuxPoly(new_coeff, new_exp)
 end 
 
+# removes redundant monomials from a rational function
 function monomial_strong_elim(f::TropicalPuiseuxRational{T}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     return TropicalPuiseuxRational(monomial_strong_elim(f.num), monomial_strong_elim(f.den))
 end
 
+# removes redundant monomials from a vector of rational functions
 function monomial_strong_elim(F::Vector{TropicalPuiseuxRational{T}}) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     return [monomial_strong_elim(f) for f in F]
 end
 
 function mlp_to_trop_with_elim(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     """
-    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+    mlp_to_trop_with_elim(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron, and runs monomial_elim at each layer.
     
     inputs: linear maps: an array containing the weight matrices of the neural network. 
             bias: an array containing the biases at each layer
             thresholds: an array containing the threshold of the activation function at each layer, i.e. the number t such that the activation is of
             the form x => max(x,t).
-    outputs: an object of type TropicalPuiseuxRational.
+    outputs: an object of type Vector{TropicalPuiseuxRational}
     """
     R = tropical_semiring(max)
     # initialisation: the first vector of tropical rational functions is just the identity function
@@ -92,7 +95,7 @@ end
 
 function mlp_to_trop_with_quasi_elim(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     """
-    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+    mlp_to_trop_quasi_elim(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron, and runs monomial_elim at each layer except the last.
     
     inputs: linear maps: an array containing the weight matrices of the neural network. 
             bias: an array containing the biases at each layer
@@ -132,6 +135,7 @@ function mlp_to_trop_with_quasi_elim(linear_maps::Vector{Matrix{T}}, bias, thres
     return output
 end 
 
+# experimental, do not use.
 function mlp_to_trop_with_double_elim(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     """
     mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
@@ -172,7 +176,7 @@ end
 
 function mlp_to_trop_with_strong_elim(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
 """
-mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+mlp_to_trop_with_strong_elim(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron, and runs monomial_strong_elim at each layer to remove redundant monomials.
 
 inputs: linear maps: an array containing the weight matrices of the neural network. 
         bias: an array containing the biases at each layer
@@ -209,7 +213,7 @@ end
 
 function mlp_to_trop_with_quicksum_with_strong_elim(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     """
-    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+    mlp_to_trop_with_quicksum_with_strong_elim(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron. Runs monomial_strong_elim at each layer, and uses quicksum operations for tropical objects.
     
     inputs: linear maps: an array containing the weight matrices of the neural network. 
             bias: an array containing the biases at each layer
@@ -250,7 +254,7 @@ end
 
 function mlp_to_trop_with_quicksum(linear_maps::Vector{Matrix{T}}, bias, thresholds) where T<:Union{Oscar.scalar_types, Rational{BigInt}}
     """
-    mlp_to_trop(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron.
+    mlp_to_trop_with_quicksum(linear_maps, bias, thresholds) computes the tropical Puiseux rational function associated to a multilayer perceptron. Uses quicksum operations for tropical objects.
     
     inputs: linear maps: an array containing the weight matrices of the neural network. 
             bias: an array containing the biases at each layer
