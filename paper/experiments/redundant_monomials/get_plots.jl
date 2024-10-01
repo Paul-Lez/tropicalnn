@@ -2,7 +2,7 @@ using CairoMakie
 using JLD2
 
 function layer_plot(layers)
-    data=JLD2.load("red_mon/rm_$layers.jld2")
+    data=JLD2.load("redundant_monomials/rm_$layers.jld2")
     sorted_keys=sort(collect(keys(data["data"])))
     sorted_values=[data["data"][key] for key in sorted_keys]
     sampled_widths=[]
@@ -21,7 +21,7 @@ function layer_plot(layers)
     lines!(ax,sampled_widths,ratios,color=:blue,label="untrained")
 
 
-    data=JLD2.load("red_mon/rm_trained_$layers.jld2")
+    data=JLD2.load("redundant_monomials/rm_trained_$layers.jld2")
     sorted_keys=sort(collect(keys(data["data"])))
     sorted_values=[data["data"][key] for key in sorted_keys]
     sampled_widths=[]
@@ -44,7 +44,7 @@ function layer_plot(layers)
     lines!(ax,sampled_widths,ratios,color=:blue,linestyle=:dash,label="trained")
     lines!(ax2,sampled_widths,accuracies,color=:red,linestyle=:dash)
     axislegend(ax,halign=:left,valign=:center)
-    save("red_mon/layer_$layers.png",f)
+    save("redundant_monomials/layer_$layers.png",f)
     
     println("time: $total_time")
 end
