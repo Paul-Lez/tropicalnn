@@ -5,6 +5,7 @@ This repository contains the code used for the experiments in the paper *Tropica
 Languages used: 
 - Julia with Oscar. Follow installation instructions here: https://www.oscar-system.org/install/
 - Matlab (archived only)
+- Python
 
 # Instructions for running the experiments 
 
