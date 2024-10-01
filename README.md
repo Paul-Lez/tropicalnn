@@ -10,6 +10,7 @@ Languages used:
 # Instructions for running the experiments 
 
 ## Julia experiments
+- Download packages to run the following scripts by running `paper/load_packages.jl`
 - Width-depth separation: run the file `paper/characterising_width_depth/launcher.jl`
 - Linear regions of a network trained on MNIST: run the file `paper/mnist/launcher.jl`
 - Symbolic calculations of linear regions: run the file `paper/num_linear_regions/launcher.jl`
