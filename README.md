@@ -3,7 +3,7 @@
 This repository contains the code used for the experiments in the paper *Tropical Expressivity of Neural Networks*. 
 
 Languages used: 
-- Julia with Oscar. Follow installation instructions here: https://www.oscar-system.org/install/
+- Julia with Oscar. Follow installation instructions [here](https://www.oscar-system.org/install).
 - Matlab (archived only)
 - Python
 
