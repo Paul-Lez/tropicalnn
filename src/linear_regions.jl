@@ -158,29 +158,18 @@ function enum_linear_regions_rat(f::TropicalPuiseuxPoly, g::TropicalPuiseuxPoly,
                 for (poly1, poly2) in combinations(vals, 2)
                     # intersect the two polyhedra
                     intesection = Oscar.intersect(poly1, poly2)
-                    # add true to the dictionary if the intersection is nonemtpy as false otherwise
+                    # add true to the dictionary if the intersection is nonemtpy and false otherwise
                     has_intersect[(poly1, poly2)] = Oscar.is_feasible(intesection)
                 end
                 # now find transitive closure of the relation given by dictionary has_intersect.
-                
-
-                ###########################################
-                ### TODO: remove the testing stuff
-                
-                #t1 = time()
-                #cl = connected_closure(vals, has_intersect)
-                #t2 = time()
-                test = n_components(vals, has_intersect)
-                #println("Experimental result: ", test)
-                #t3 = time()
-                #println("Times are ", t2 - t1, " and ", t3 - t2)
-
+                num_components = n_components(vals, has_intersect)
                 ###########################################
                 # Temporary: we're only interested in the number of connected components for the experiments rather than the 
                 # exact polyhedra, so instead of returning the data of the polyhedra, we just return an arbitrary list 
                 # that has length the number of connected components. This is messy but means making the connected 
                 # closure search a bit easier.
-                linear_regions_repeat = repeat([1], test)
+                # TODO: clean this up. 
+                linear_regions_repeat = repeat([1], num_components)
                 append!(lin_regions, linear_regions_repeat)
             end 
         end
