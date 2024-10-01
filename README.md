@@ -17,7 +17,7 @@ Languages used:
 - Hoffman constants: `paper/hoffman_constants/trop_rat_map.jl`
 
 ## Python experiment 
-- Numerical computation of linear regions of invariant neural networks (section 5.2). Run the Jupyter notebook `experiment_launchers/numerical_linear_regions.ipynb`.
+- Numerical computation of linear regions of invariant neural networks (section 5.2). Run the Jupyter notebook `paper/numerical_linear_regions.ipynb`.
 
 ## Matlab experiments
 For the sake of completness, we include the MATLAB code used to compute Hoffman constants using the PVZ algorithm. We found this version to be unstable, occasionally yielding incorrect numerical values.
