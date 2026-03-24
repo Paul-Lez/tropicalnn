@@ -1,3 +1,4 @@
 *.jld2
 *.vscode
 *.json
+/outputs
