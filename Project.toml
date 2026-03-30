@@ -1,9 +1,0 @@
-[deps]
-CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
-DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
-Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
-Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
-JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
-MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
-MetaGraphsNext = "fa8bd995-216d-47f1-8a91-f3b68fbeb377"
-TropicalNN = "45302f6a-f5d4-4eaf-9bda-c9ca7b62f2bc"
