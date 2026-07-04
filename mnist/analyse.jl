@@ -14,11 +14,11 @@ function extract_weights_biases_thresholds(model, symbolic=true)
     if symbolic
         weights = [Rational{BigInt}.(model[i].weight) for i in 1:num_dense_layers]
         biases = [Rational{BigInt}.(model[i].bias) for i in 1:num_dense_layers]
-        thresholds = [Rational{BigInt}.(zeros(length(model[i].bias))) for i in 1:num_dense_layers]
+        thresholds = [Rational{BigInt}.(zeros(length(model[i].bias))) for i in 1:(num_dense_layers-1)]
     else
         weights = [model[i].weight for i in 1:num_dense_layers]
         biases = [model[i].bias for i in 1:num_dense_layers]
-        thresholds = [zeros(length(model[i].bias)) for i in 1:num_dense_layers]
+        thresholds = [zeros(length(model[i].bias)) for i in 1:(num_dense_layers-1)]
     end
     
     return weights, biases, thresholds
@@ -43,7 +43,7 @@ output = TropicalNN.mlp_to_trop(weights, biases, thresholds, quicksum=true)
 println("Got tropical representation!")
 
 println("Enumerating linear regions...")
-lin_regions = TropicalNN.enum_linear_regions_rat(output[1]) #_highs
+lin_regions = TropicalNN.enum_linear_regions_rat_general(output[1]; mode=TropicalNN.OscarMode()) #_highs
 println("Number of linear regions is: ", length(lin_regions))
 
 println("Counting monomials...")
@@ -63,7 +63,7 @@ analysis = Dict(
 
 println("Saving analysis...")
 # Make sure the directory exists before attempting to save
-output_dir = "../outputs/mnist"
+output_dir = "outputs/mnist"
 mkpath(output_dir)
 
 # Using jldsave to explicitly save the dictionary object into the file

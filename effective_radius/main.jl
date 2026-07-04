@@ -7,7 +7,7 @@ mkpath(output_dir)
 w, b, t = random_mlp([2, 4, 1])
 rmap = mlp_to_trop(w, b, t)[1]
 er = exact_er(rmap)
-linear_regions = enum_linear_regions_rat(rmap)
+linear_regions = enum_linear_regions_rat_general(rmap; mode=OscarMode())
 
 margin_limit = Float64(er * 1.2)
 println(margin_limit)

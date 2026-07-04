@@ -160,7 +160,7 @@ function analyze_epochs(data_path)
         weights = JLD2.load("$data_path/$epoch/weights.jld2")["data"]
         biases  = JLD2.load("$data_path/$epoch/biases.jld2")["data"]
 
-        t = [Rational{BigInt}.(zeros(length(b))) for b in biases]
+        t = [Rational{BigInt}.(zeros(length(b))) for b in biases[1:end-1]]
 
         f_pre  = mlp_to_trop(weights,biases,t)[1]
         f_post = monomial_strong_elim(f_pre)

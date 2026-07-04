@@ -4,8 +4,8 @@ using Plots.PlotMeasures
 using Oscar
 
 function plot_linear_regions(lrs; xlims=(-10.0, 10.0), ylims=(-10.0, 10.0), kwargs...)
-    A_box = [1.0  0.0; -1.0  0.0; 0.0  1.0; 0.0 -1.0]
-    b_box = [xlims[2], -xlims[1], ylims[2], -ylims[1]]
+    A_box = Rational{BigInt}[1 0; -1 0; 0 1; 0 -1]
+    b_box = Rational{BigInt}.([xlims[2], -xlims[1], ylims[2], -ylims[1]])
     bbox = Oscar.polyhedron(A_box, b_box)
 
     p = plot(; 

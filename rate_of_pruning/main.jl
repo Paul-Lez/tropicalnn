@@ -45,7 +45,7 @@ end
 function get_monomial_counts(model)
     w = [Rational{BigInt}.(model[i].weight) for i in 1:length(model)-1]
     b = [Rational{BigInt}.(model[i].bias)   for i in 1:length(model)-1]
-    t = [Rational{BigInt}.(zeros(length(bias))) for bias in b]
+    t = [Rational{BigInt}.(zeros(length(bias))) for bias in b[1:end-1]]
 
     f_pre  = mlp_to_trop(w, b, t)[1]
     f_post = monomial_strong_elim(f_pre)

@@ -1,0 +1,23 @@
+name = "TropicalNNExperiments"
+uuid = "b814d752-44fc-4260-8e87-3f7821012607"
+authors = ["Paul Lezeau"]
+
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+Flux = "587475ba-b771-5e3f-ad9e-33799f191a9c"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+JLD2 = "033835bb-8acc-5ee8-8aae-3f567f8a3819"
+Logging = "56ddb016-857b-54e1-b83d-db4d58db5568"
+MLDatasets = "eb30cadb-4394-5ae3-aed4-317e484a6458"
+Oscar = "f1435218-dba5-11e9-1e4d-f1a5fab5fc13"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+Printf = "de0858da-6303-5e67-8744-51eddeeeb8d7"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+TropicalNN = "45302f6a-f5d4-4eaf-9bda-c9ca7b62f2bc"
+
+[sources]
+TropicalNN = {path = "../TropicalNN.jl"}
+
+[compat]
+julia = "1.12"
