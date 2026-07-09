@@ -2,6 +2,19 @@ using TropicalNN
 using Flux
 using JLD2
 
+# Pick the LinearRegionsCalculationMode via the TROPICALNN_MODE env var
+# ("highs" by default, or "oscar").
+function lp_mode()
+    mode_name = lowercase(get(ENV, "TROPICALNN_MODE", "highs"))
+    if mode_name == "highs"
+        return TropicalNN.HiGHSMode()
+    elseif mode_name == "oscar"
+        return TropicalNN.OscarMode()
+    else
+        error("Unknown TROPICALNN_MODE=\"$mode_name\"; expected \"highs\" or \"oscar\"")
+    end
+end
+
 # Set the width of the hidden layer of the neural network
 width = 4
 
@@ -43,7 +56,7 @@ output = TropicalNN.mlp_to_trop(weights, biases, thresholds, quicksum=true)
 println("Got tropical representation!")
 
 println("Enumerating linear regions...")
-lin_regions = TropicalNN.enum_linear_regions_rat_general(output[1]; mode=TropicalNN.OscarMode()) #_highs
+lin_regions = TropicalNN.enum_linear_regions_rat_general(output[1]; mode=lp_mode())
 println("Number of linear regions is: ", length(lin_regions))
 
 println("Counting monomials...")

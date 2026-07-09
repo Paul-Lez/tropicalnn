@@ -3,6 +3,24 @@ using Plots
 using Plots.PlotMeasures
 using Oscar
 
+"""
+    lp_mode()
+
+Pick the `LinearRegionsCalculationMode` to use for region enumeration,
+based on the `TROPICALNN_MODE` environment variable (`"highs"` by default,
+or `"oscar"`).
+"""
+function lp_mode()
+    mode_name = lowercase(get(ENV, "TROPICALNN_MODE", "highs"))
+    if mode_name == "highs"
+        return HiGHSMode()
+    elseif mode_name == "oscar"
+        return OscarMode()
+    else
+        error("Unknown TROPICALNN_MODE=\"$mode_name\"; expected \"highs\" or \"oscar\"")
+    end
+end
+
 function plot_linear_regions(lrs; xlims=(-10.0, 10.0), ylims=(-10.0, 10.0), kwargs...)
     A_box = Rational{BigInt}[1 0; -1 0; 0 1; 0 -1]
     b_box = Rational{BigInt}.([xlims[2], -xlims[1], ylims[2], -ylims[1]])
