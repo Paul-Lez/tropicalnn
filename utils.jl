@@ -21,41 +21,53 @@ function lp_mode()
     end
 end
 
-function plot_linear_regions(lrs; xlims=(-10.0, 10.0), ylims=(-10.0, 10.0), kwargs...)
+"""
+    _as_oscar_polyhedron(poly; mode)
+
+Return an exact `Oscar.Polyhedron` for a region produced by `enum_linear_regions_rat_general`,
+regardless of which `LinearRegionsCalculationMode` backend was used.
+"""
+function _as_oscar_polyhedron(poly; mode)
+    if mode isa OscarMode
+        return poly
+    end
+    A = get_matrix(poly; mode = mode)
+    b = get_vector(poly; mode = mode)
+    A_rat = Rational{BigInt}[rationalize(BigInt, x; tol = 1e-8) for x in A]
+    b_rat = Rational{BigInt}[rationalize(BigInt, x; tol = 1e-8) for x in b]
+    return Oscar.polyhedron(A_rat, b_rat)
+end
+
+function plot_linear_regions(linear_regions; mode = lp_mode(), xlims=(-10.0, 10.0), ylims=(-10.0, 10.0), kwargs...)
     A_box = Rational{BigInt}[1 0; -1 0; 0 1; 0 -1]
     b_box = Rational{BigInt}.([xlims[2], -xlims[1], ylims[2], -ylims[1]])
     bbox = Oscar.polyhedron(A_box, b_box)
 
-    p = plot(; 
-        xlim = xlims, 
-        ylim = ylims, 
-        legend = false, 
-        aspect_ratio = :equal, 
-        
-        xticks = false, 
+    p = plot(;
+        xlim = xlims,
+        ylim = ylims,
+        legend = false,
+        aspect_ratio = :equal,
+
+        xticks = false,
         yticks = false,
-        margin = 0mm, 
-        
-        dpi = 300, 
-        
+        margin = 0mm,
+
+        dpi = 300,
+
         kwargs...
     )
     cols = theme_palette(:auto)
 
-    for (i, item) in enumerate(lrs)
+    # for each region, convert to an Oscar polyhedron, intersect with the bounding box,
+    # and plot the resulting polygon if it is feasible and full-dimensional
+    for (i, region) in enumerate(linear_regions)
         c = cols[mod1(i, length(cols))]
-        
-        polys = if item isa Tuple
-            [item[1]]
-        elseif !hasmethod(iterate, (typeof(item),))
-            [item]
-        else
-            item
-        end
-        
-        for poly in polys
-            bounded_poly = Oscar.intersect(poly, bbox)
-            
+
+        for poly in region
+            oscar_poly = _as_oscar_polyhedron(poly; mode = mode)
+            bounded_poly = Oscar.intersect(oscar_poly, bbox)
+
             if Oscar.is_feasible(bounded_poly) && Oscar.is_fulldimensional(bounded_poly)
                 verts = collect(Oscar.vertices(bounded_poly))
                 if isempty(verts)
