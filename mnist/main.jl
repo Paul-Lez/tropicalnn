@@ -1,5 +1,5 @@
 using Flux
-using Flux: DataLoader, onehotbatch, onecold, crossentropy, setup, update!
+using Flux: DataLoader, setup, update!
 using MLDatasets
 using JLD2
 using Statistics
@@ -10,15 +10,17 @@ using Printf
 # ==========================================
 function get_data(batch_size)
     # Pre-v0.7 MLDatasets syntax calls the module's functions directly
-    X_train, y_train = MLDatasets.MNIST.traindata(Float32)
-    X_test, y_test = MLDatasets.MNIST.testdata(Float32)
+    X_train, y_train_digits = MLDatasets.MNIST.traindata(Float32)
+    X_test, y_test_digits = MLDatasets.MNIST.testdata(Float32)
 
-    # Reshape features to (W, H, C, N) and one-hot encode targets
+    # Reshape features to (features, N)
     X_train = reshape(Float32.(X_train), 28^2, :)
-    y_train = onehotbatch(y_train, 0:9)
-
     X_test = reshape(Float32.(X_test), 28^2, :)
-    y_test = onehotbatch(y_test, 0:9)
+
+    # Binary label: 1 if the digit shown is a 0, else 0. Kept as a (1, N)
+    # matrix so it lines up with the model's scalar output.
+    y_train = reshape(Float32.(y_train_digits .== 0), 1, :)
+    y_test = reshape(Float32.(y_test_digits .== 0), 1, :)
 
     # Create DataLoaders to yield minibatches
     train_loader = DataLoader((X_train, y_train), batchsize=batch_size, shuffle=true)
@@ -31,32 +33,32 @@ end
 # 2. Define the Model
 # ==========================================
 function build_model(width)
-    # The exact MLP architecture expected by the TropicalNN analysis script
     Chain(
-        Dense(28^2 => width, relu), 
-        Dense(width => 10), 
-        softmax
+        Dense(28^2 => width, relu),
+        Dense(width => 1),
+        # binary out: "is the digit 0?" classification
+        sigmoid
     )
 end
 
-# Helper function to calculate accuracy
-accuracy(model, x, y) = mean(onecold(model(x)) .== onecold(y))
+# Helper function to calculate accuracy for the binary (0 vs not-0) task
+accuracy(model, x, y) = mean((model(x) .> 0.5f0) .== (y .> 0.5f0))
 
 # ==========================================
 # 3. Main Training Routine
 # ==========================================
 function train_and_save()
-    width = 4          # Matches your analysis script
-    epochs = 30        # Bumped up slightly to help the tiny network learn
+    width = 4         
+    epochs = 30       
     batch_size = 128
-    learning_rate = 0.005 # Slightly higher LR for this shallow network
+    learning_rate = 0.005
 
     println("Loading data...")
     train_loader, test_loader, train_full, test_full = get_data(batch_size)
 
     println("Building MLP model with width = $width...")
     model = build_model(width)
-    
+
     # Setup the Adam optimizer
     opt_state = Flux.setup(Adam(learning_rate), model)
 
@@ -66,12 +68,12 @@ function train_and_save()
         batch_count = 0
 
         for (x, y) in train_loader
-            # Because the model ends in `softmax`, we use standard `crossentropy` 
-            # instead of `logitcrossentropy`
+            # Because the model ends in `sigmoid`, we use standard
+            # `binarycrossentropy` instead of `logitbinarycrossentropy`
             loss_val, grads = Flux.withgradient(model) do m
-                crossentropy(m(x), y)
+                mean(Flux.binarycrossentropy(m(x), y))
             end
-            
+
             # Update the model parameters
             Flux.update!(opt_state, model, grads[1])
 
@@ -104,7 +106,7 @@ function train_and_save()
 
     # Save the evaluation metrics
     open(joinpath(output_dir, "metrics.txt"), "w") do io
-        write(io, "Model Type: MLP (Width: $width)\n")
+        write(io, "Model Type: MLP (Width: $width), binary output (digit == 0)\n")
         write(io, "Train Accuracy: $(round(train_acc * 100, digits=2))%\n")
         write(io, "Test Accuracy: $(round(test_acc * 100, digits=2))%\n")
     end

@@ -19,10 +19,10 @@ function generate_data(num_train_per_cluster=48, num_test_per_cluster=16)
     Y_train = Int[]
 
     X_train[1:num_train_per_cluster, :] =
-        reduce(vcat, [f1(rand(), rand())' for _ in 1:num_train_per_cluster])
+        Base.reduce(vcat, [f1(rand(), rand())' for _ in 1:num_train_per_cluster])
 
     X_train[num_train_per_cluster+1:end, :] =
-        reduce(vcat, [f2(rand(), rand())' for _ in 1:num_train_per_cluster])
+        Base.reduce(vcat, [f2(rand(), rand())' for _ in 1:num_train_per_cluster])
 
     append!(Y_train, fill(0, num_train_per_cluster))
     append!(Y_train, fill(1, num_train_per_cluster))
@@ -31,10 +31,10 @@ function generate_data(num_train_per_cluster=48, num_test_per_cluster=16)
     Y_test = Int[]
 
     X_test[1:num_test_per_cluster, :] =
-        reduce(vcat, [f1(rand(), rand())' for _ in 1:num_test_per_cluster])
+        Base.reduce(vcat, [f1(rand(), rand())' for _ in 1:num_test_per_cluster])
 
     X_test[num_test_per_cluster+1:end, :] =
-        reduce(vcat, [f2(rand(), rand())' for _ in 1:num_test_per_cluster])
+        Base.reduce(vcat, [f2(rand(), rand())' for _ in 1:num_test_per_cluster])
 
     append!(Y_test, fill(0, num_test_per_cluster))
     append!(Y_test, fill(1, num_test_per_cluster))
@@ -48,7 +48,7 @@ function get_monomial_counts(model)
     t = [Rational{BigInt}.(zeros(length(bias))) for bias in b[1:end-1]]
 
     f_pre  = mlp_to_trop(w, b, t)[1]
-    f_post = monomial_strong_elim(f_pre)
+    f_post = TropicalNN.reduce(f_pre)
 
     return monomial_count(f_pre), monomial_count(f_post)
 end

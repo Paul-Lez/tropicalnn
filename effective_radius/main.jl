@@ -7,11 +7,11 @@ mkpath(output_dir)
 w, b, t = random_mlp([2, 4, 1])
 rmap = mlp_to_trop(w, b, t)[1]
 er = exact_er(rmap)
-linear_regions = enum_linear_regions_rat_general(rmap; mode=lp_mode())
+regions = linear_regions(rmap; mode=lp_mode())
 
 margin_limit = Float64(er * 1.2)
 println(margin_limit)
-fig = plot_linear_regions(linear_regions, xlims=(-margin_limit, margin_limit), ylims=(-margin_limit, margin_limit))
+fig = plot_linear_regions(regions, xlims=(-margin_limit, margin_limit), ylims=(-margin_limit, margin_limit))
 
 sq_x = [er, -er, -er,  er, er]
 sq_y = [er,  er, -er, -er, er]

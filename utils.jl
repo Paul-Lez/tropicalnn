@@ -24,7 +24,7 @@ end
 """
     _as_oscar_polyhedron(poly; mode)
 
-Return an exact `Oscar.Polyhedron` for a region produced by `enum_linear_regions_rat_general`,
+Return an exact `Oscar.Polyhedron` for a region produced by `linear_regions`,
 regardless of which `LinearRegionsCalculationMode` backend was used.
 """
 function _as_oscar_polyhedron(poly; mode)

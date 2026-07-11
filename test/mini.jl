@@ -1,7 +1,7 @@
 using CSV
 using DataFrames
 using Flux
-using Flux: DataLoader, onehotbatch, onecold, crossentropy
+using Flux: DataLoader
 using Graphs
 using JLD2
 using MLDatasets
@@ -47,11 +47,11 @@ function smoke_visualize_linear_regions()
 
     weights, biases, thresholds = random_mlp([2, 1, 1])
     f = mlp_to_trop(weights, biases, thresholds)[1]
-    linear_regions = enum_linear_regions_rat_general(f; mode=OscarMode())
+    regions = linear_regions(f; mode=OscarMode())
 
-    fig = plot_linear_regions(linear_regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
+    fig = plot_linear_regions(regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
     savefig(fig, joinpath(output_dir, "tiny_nn.png"))
-    return " ($(length(linear_regions)) regions)"
+    return " ($(length(regions)) regions)"
 end
 
 function smoke_effective_radius()
@@ -61,9 +61,9 @@ function smoke_effective_radius()
     weights, biases, thresholds = random_mlp([2, 1, 1])
     rmap = mlp_to_trop(weights, biases, thresholds)[1]
     er = exact_er(rmap)
-    linear_regions = enum_linear_regions_rat_general(rmap; mode=OscarMode())
+    regions = linear_regions(rmap; mode=OscarMode())
 
-    fig = plot_linear_regions(linear_regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
+    fig = plot_linear_regions(regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
     savefig(fig, joinpath(output_dir, "bounding_linear_regions.png"))
     return " (er=$(Float64(er)))"
 end
@@ -82,7 +82,7 @@ end
 function smoke_get_monomial_counts(model)
     weights, biases, thresholds = model_weights_biases_thresholds(model)
     f_pre = mlp_to_trop(weights, biases, thresholds)[1]
-    f_post = monomial_strong_elim(f_pre)
+    f_post = TropicalNN.reduce(f_pre)
     return monomial_count(f_pre), monomial_count(f_post)
 end
 
@@ -169,7 +169,7 @@ function smoke_analyze_volume_epochs(data_path)
         thresholds = [Rational{BigInt}.(zeros(length(bias))) for bias in biases[1:end-1]]
 
         f_pre = mlp_to_trop(weights, biases, thresholds)[1]
-        f_post = monomial_strong_elim(f_pre)
+        f_post = TropicalNN.reduce(f_pre)
         graph = get_graph(f_post)
         edge_data = Dict("gradients"=>edge_directions(graph)["full"], "lengths"=>edge_lengths(graph)["full"])
 
@@ -242,19 +242,19 @@ function smoke_mnist_main()
     mkpath(output_dir)
 
     X_train = Float32[0.0 1.0 0.0 1.0; 0.0 0.0 1.0 1.0]
-    y_train = onehotbatch([0, 1, 1, 0], 0:1)
+    y_train = Float32[0.0 1.0 1.0 0.0]
     loader = DataLoader((X_train, y_train), batchsize=2, shuffle=false)
 
-    model = Chain(Dense(2 => 2, relu), Dense(2 => 2), softmax)
+    model = Chain(Dense(2 => 2, relu), Dense(2 => 1), sigmoid)
     opt_state = Flux.setup(Adam(0.005), model)
     for (x, y) in loader
         _, grads = Flux.withgradient(model) do m
-            crossentropy(m(x), y)
+            mean(Flux.binarycrossentropy(m(x), y))
         end
         Flux.update!(opt_state, model, grads[1])
     end
 
-    acc = mean(onecold(model(X_train)) .== onecold(y_train))
+    acc = mean((model(X_train) .> 0.5f0) .== (y_train .> 0.5f0))
     model_state = Flux.state(model)
     jldsave(joinpath(output_dir, "model.jld2"); model_state)
     open(joinpath(output_dir, "metrics.txt"), "w") do io
@@ -265,13 +265,13 @@ end
 
 function smoke_mnist_analyse()
     output_dir = joinpath(SMOKE_ROOT, "mnist")
-    model = Chain(Dense(2 => 2, relu), Dense(2 => 2), softmax)
+    model = Chain(Dense(2 => 2, relu), Dense(2 => 1), sigmoid)
     model_state = JLD2.load(joinpath(output_dir, "model.jld2"), "model_state")
     Flux.loadmodel!(model, model_state)
 
     weights, biases, thresholds = model_weights_biases_thresholds(model)
     output = mlp_to_trop(weights, biases, thresholds, quicksum=true)
-    lin_regions = enum_linear_regions_rat_general(output[1]; mode=OscarMode())
+    lin_regions = linear_regions(output[1]; mode=OscarMode())
     mon_count = monomial_count(output)
 
     analysis = Dict("trop_rep"=>output, "num_lin_region"=>length(lin_regions), "num_mon"=>mon_count)
