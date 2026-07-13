@@ -32,10 +32,11 @@ end
 # ==========================================
 # 2. Define the Model
 # ==========================================
-function build_model(width)
+function build_model(width, width2)
     Chain(
         Dense(28^2 => width, relu),
-        Dense(width => 1),
+        Dense(width => width2, relu),
+        Dense(width2 => 1),
         # binary out: "is the digit 0?" classification
         sigmoid
     )
@@ -48,16 +49,17 @@ accuracy(model, x, y) = mean((model(x) .> 0.5f0) .== (y .> 0.5f0))
 # 3. Main Training Routine
 # ==========================================
 function train_and_save()
-    width = 4         
-    epochs = 30       
+    width = 5
+    width2 = 5
+    epochs = 30
     batch_size = 128
     learning_rate = 0.005
 
     println("Loading data...")
     train_loader, test_loader, train_full, test_full = get_data(batch_size)
 
-    println("Building MLP model with width = $width...")
-    model = build_model(width)
+    println("Building MLP model with widths = $width, $width2...")
+    model = build_model(width, width2)
 
     # Setup the Adam optimizer
     opt_state = Flux.setup(Adam(learning_rate), model)
@@ -106,7 +108,7 @@ function train_and_save()
 
     # Save the evaluation metrics
     open(joinpath(output_dir, "metrics.txt"), "w") do io
-        write(io, "Model Type: MLP (Width: $width), binary output (digit == 0)\n")
+        write(io, "Model Type: MLP (Widths: $width, $width2), binary output (digit == 0)\n")
         write(io, "Train Accuracy: $(round(train_acc * 100, digits=2))%\n")
         write(io, "Test Accuracy: $(round(test_acc * 100, digits=2))%\n")
     end

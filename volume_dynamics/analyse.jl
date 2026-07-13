@@ -1,10 +1,26 @@
 using JLD2
 using CSV
 using DataFrames
+using Graphs
 using Statistics
+using TropicalNN
 
-function export_to_csvs()
-    data_path = "outputs/volume_dynamics"
+function bounded_region_volumes(graph)
+    region_volumes = Float64[]
+
+    for vertex in vertices(graph)
+        # A graph vertex represents one connected linear region. Its metadata
+        # stores one volume per constituent polyhedron, so these must be summed
+        # before computing statistics across regions.
+        component_volumes = Float64.(graph[vertex]["volume"])
+        region_volume = sum(component_volumes)
+        isfinite(region_volume) && push!(region_volumes, region_volume)
+    end
+
+    return region_volumes
+end
+
+function export_to_csvs(data_path="outputs/volume_dynamics")
     
     println("Loading training data...")
     # -------------------------------
@@ -25,20 +41,26 @@ function export_to_csvs()
     # -------------------------------
     # 2. Monomial Counts CSV
     # -------------------------------
-    println("Loading monomial data...")
-    monomial_data = JLD2.load("$data_path/monomial_data.jld2")["data"]
-    
     # Get the list of epochs that were actually saved as folders
-    epochs = sort(parse.(Int, filter(x -> !occursin(".", x), readdir(data_path))))
-    
-    df_mono = DataFrame(
-        Epoch = epochs,
-        Pre_Pruning = monomial_data["pre"],
-        Post_Pruning = monomial_data["post"]
-    )
-    
-    CSV.write("$data_path/monomial_counts.csv", df_mono)
-    println("Saved monomial_counts.csv")
+    epoch_names = filter(name -> isdir(joinpath(data_path, name)) &&
+                                 occursin(r"^\d+$", name), readdir(data_path))
+    epochs = sort(parse.(Int, epoch_names))
+
+    monomial_path = joinpath(data_path, "monomial_data.jld2")
+    if isfile(monomial_path)
+        println("Loading monomial data...")
+        monomial_data = JLD2.load(monomial_path)["data"]
+        num_monomial_epochs = length(monomial_data["pre"])
+        length(monomial_data["post"]) == num_monomial_epochs ||
+            error("Pre- and post-pruning monomial histories have different lengths")
+        df_mono = DataFrame(
+            Epoch = 0:(num_monomial_epochs - 1),
+            Pre_Pruning = monomial_data["pre"],
+            Post_Pruning = monomial_data["post"]
+        )
+        CSV.write(joinpath(data_path, "monomial_counts.csv"), df_mono)
+        println("Saved monomial_counts.csv")
+    end
 
     # -------------------------------
     # 3. Finite Volumes Summary Stats
@@ -50,13 +72,8 @@ function export_to_csvs()
     count_vols = Int[]
     
     for epoch in epochs
-        edge_data = JLD2.load("$data_path/$epoch/edge_data.jld2")["data"]
-        
-        # Convert lengths to Float64 (handles Rational{BigInt} parsing safely)
-        lengths = Float64.(edge_data["lengths"])
-        
-        # Filter out infinite lengths (unbounded rays in the tropical curve)
-        finite_vols = filter(isfinite, lengths)
+        graph = JLD2.load("$data_path/$epoch/graph.jld2")["graph"]
+        finite_vols = bounded_region_volumes(graph)
         
         if isempty(finite_vols)
             push!(mean_vols, NaN)
@@ -78,8 +95,9 @@ function export_to_csvs()
     
     CSV.write("$data_path/finite_volumes_stats.csv", df_vols)
     println("Saved finite_volumes_stats.csv")
-    println("All data exported successfully!")
+    println("All CSV data exported successfully!")
 end
 
 # Run the extraction
-export_to_csvs()
+data_path = isempty(ARGS) ? "outputs/volume_dynamics" : ARGS[1]
+export_to_csvs(data_path)

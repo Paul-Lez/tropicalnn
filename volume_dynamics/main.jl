@@ -1,8 +1,14 @@
+include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
+const EXPERIMENT_RUNTIME = setup_experiment!()
+
 using Flux
 using Graphs
 using JLD2
 using TropicalNN
 using Logging
+
+const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
+const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
 global_logger(SimpleLogger(stderr, Logging.Error))
 
@@ -147,7 +153,7 @@ end
 # Tropical analysis
 # -------------------------------
 
-function analyze_epochs(data_path)
+function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
 
     epochs = sort(parse.(Int, filter(x->!occursin(".",x), readdir(data_path))))
 
@@ -163,9 +169,9 @@ function analyze_epochs(data_path)
         t = [Rational{BigInt}.(zeros(length(b))) for b in biases[1:end-1]]
 
         f_pre  = mlp_to_trop(weights,biases,t)[1]
-        f_post = TropicalNN.reduce(f_pre)
+        f_post = TropicalNN.reduce(f_pre; mode=mode, workers=workers)
 
-        G = get_graph(f_post)
+        G = get_graph(f_post; mode=mode)
 
         edge_data = Dict(
             "gradients" => edge_directions(G)["full"],
@@ -202,7 +208,7 @@ function run_experiment()
 
     JLD2.save("$data_path/training_data.jld2","data",training_data)
 
-    analyze_epochs(data_path)
+    analyze_epochs(data_path; mode=REGION_MODE, workers=WORKER_IDS)
 end
 
 run_experiment()
