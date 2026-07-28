@@ -1,55 +1,81 @@
+include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
+const EXPERIMENT_RUNTIME = setup_experiment!()
+
 using TropicalNN
 using DataFrames
 using CSV
 using Logging
 
+const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
+const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
+
 global_logger(SimpleLogger(stderr, Logging.Error))
 
-# Helper to get monomial counts straight from generated dimensions
+# For one random network, compute the unpruned tropical representation and the
+# layerwise-pruned one (strong_elim during construction) from the same weights.
 function count_monomials(dims)
-    w, b, t = random_mlp(dims)
-    
-    f_pre = mlp_to_trop(w, b, t)[1]
-    
-    return monomial_count(f_pre)
+    w, b, t = random_mlp(dims, symbolic=false)
+
+    t_unpruned = @elapsed f_unpruned = mlp_to_trop(w, b, t, quicksum=true, dedup=true)[1]
+    t_pruned = @elapsed f_pruned = mlp_to_trop(w, b, t, quicksum=true, dedup=true,
+        strong_elim=true, elim_mode=REGION_MODE, workers=WORKER_IDS)[1]
+
+    return monomial_count(f_unpruned), monomial_count(f_pruned), t_unpruned, t_pruned
 end
 
 function run_experiments()
-    num_trials = 3
+    num_trials = 30
     mkpath("outputs/width_depth")
 
-    widths = [2, 3, 4, 5, 6, 7, 8] 
-    width_results = DataFrame(Width=Int[], Pre_Avg=Float64[])
-    
+    widths = [2, 3, 4, 5, 6, 7, 8]
+    width_results = DataFrame(Width=Int[], Unpruned_Avg=Float64[], StrongElim_Avg=Float64[],
+        Unpruned_Time_Avg=Float64[], StrongElim_Time_Avg=Float64[])
+
     println("--- Starting OneLayer Sweep ---")
     for w in widths
         println("Processing Width: $w")
-        sum_pre = 0.0
-        
+        sum_unpruned = 0.0
+        sum_pruned = 0.0
+        sum_t_unpruned = 0.0
+        sum_t_pruned = 0.0
+
         for _ in 1:num_trials
-            pre = count_monomials([2, w, 1])
-            sum_pre += pre
+            unpruned, pruned, t_unpruned, t_pruned = count_monomials([2, w + 2, 1])
+            sum_unpruned += unpruned
+            sum_pruned += pruned
+            sum_t_unpruned += t_unpruned
+            sum_t_pruned += t_pruned
         end
-        
-        push!(width_results, (w, sum_pre / num_trials))
+
+        push!(width_results, (w, sum_unpruned / num_trials, sum_pruned / num_trials,
+            sum_t_unpruned / num_trials, sum_t_pruned / num_trials))
     end
     CSV.write("outputs/width_depth/sweep_onelayer.csv", width_results)
-    
 
-    twolayer_results = DataFrame(Depth=Int[], Pre_Avg=Float64[])
+
+    twolayer_results = DataFrame(Depth=Int[], Unpruned_Avg=Float64[], StrongElim_Avg=Float64[],
+        Unpruned_Time_Avg=Float64[], StrongElim_Time_Avg=Float64[])
+
     println("\n--- Starting TwoLayer Sweep ---")
     for w in widths
         println("Processing Width: $w")
-        sum_pre = 0.0
-        
-        dims = vcat([2, 2, w, 1])
-        
+        sum_unpruned = 0.0
+        sum_pruned = 0.0
+        sum_t_unpruned = 0.0
+        sum_t_pruned = 0.0
+
+        dims = vcat([2, w, 2, 1])
+
         for _ in 1:num_trials
-            pre = count_monomials(dims)
-            sum_pre += pre
+            unpruned, pruned, t_unpruned, t_pruned = count_monomials(dims)
+            sum_unpruned += unpruned
+            sum_pruned += pruned
+            sum_t_unpruned += t_unpruned
+            sum_t_pruned += t_pruned
         end
-        
-        push!(twolayer_results, (w, sum_pre / num_trials))
+
+        push!(twolayer_results, (w, sum_unpruned / num_trials, sum_pruned / num_trials,
+            sum_t_unpruned / num_trials, sum_t_pruned / num_trials))
     end
     CSV.write("outputs/width_depth/sweep_twolayer.csv", twolayer_results)
 end

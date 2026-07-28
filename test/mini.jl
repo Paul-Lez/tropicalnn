@@ -1,3 +1,6 @@
+include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
+const EXPERIMENT_RUNTIME = setup_experiment!()
+
 using CSV
 using DataFrames
 using Flux
@@ -9,6 +12,9 @@ using Plots
 using Printf
 using Statistics
 using TropicalNN
+
+const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
+const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
 include("../utils.jl")
 
@@ -45,44 +51,67 @@ function smoke_visualize_linear_regions()
     output_dir = joinpath(SMOKE_ROOT, "visualize_linear_regions")
     mkpath(output_dir)
 
-    weights, biases, thresholds = random_mlp([2, 1, 1])
+    weights, biases, thresholds = random_mlp([2, 3, 1])
     f = mlp_to_trop(weights, biases, thresholds)[1]
-    regions = linear_regions(f; mode=OscarMode())
-
-    fig = plot_linear_regions(regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
-    savefig(fig, joinpath(output_dir, "tiny_nn.png"))
-    return " ($(length(regions)) regions)"
+    
+    counts = Int[]
+    for (name, mode) in (("oscar", OscarMode()), ("highs", REGION_MODE))
+        regions = linear_regions(f; mode=mode, workers=WORKER_IDS)
+        fig = plot_linear_regions(regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
+        savefig(fig, joinpath(output_dir, "tiny_nn_$name.png"))
+        push!(counts, length(regions))
+    end
+    return " (oscar=$(counts[1]), highs=$(counts[2]) regions)"
 end
 
 function smoke_effective_radius()
     output_dir = joinpath(SMOKE_ROOT, "effective_radius")
     mkpath(output_dir)
 
-    weights, biases, thresholds = random_mlp([2, 1, 1])
+    weights, biases, thresholds = random_mlp([2, 3, 1])
     rmap = mlp_to_trop(weights, biases, thresholds)[1]
-    er = exact_er(rmap)
-    regions = linear_regions(rmap; mode=OscarMode())
 
+    # The real experiment times the two Hoffman-constant algorithms against each
+    # other (brute-force exact_hoff vs. PVZ pruning pvz_hoff) and derives the
+    # effective radius from the constant. Exercise both algorithms and check they
+    # agree, then compute exact_er under both LP backends.
+    hoff_exact = exact_hoff(rmap; mode=REGION_MODE)
+    hoff_pvz   = pvz_hoff(rmap; mode=REGION_MODE)
+    @assert isapprox(Float64(hoff_exact), Float64(hoff_pvz); rtol=1e-6) "exact_hoff vs pvz_hoff disagree: $hoff_exact vs $hoff_pvz"
+
+    er_oscar = exact_er(rmap; mode=OscarMode())
+    er_highs = exact_er(rmap; mode=REGION_MODE)
+
+    regions = linear_regions(rmap; mode=REGION_MODE, workers=WORKER_IDS)
     fig = plot_linear_regions(regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
     savefig(fig, joinpath(output_dir, "bounding_linear_regions.png"))
-    return " (er=$(Float64(er)))"
+    return " (er_oscar=$(Float64(er_oscar)), er_highs=$(Float64(er_highs)))"
 end
 
 function smoke_width_depth()
     output_dir = joinpath(SMOKE_ROOT, "width_depth")
     mkpath(output_dir)
 
-    weights, biases, thresholds = random_mlp([2, 1, 1])
-    f_pre = mlp_to_trop(weights, biases, thresholds)[1]
-    results = DataFrame(Width=[1], Pre_Avg=[Float64(monomial_count(f_pre))])
+    # One-layer sweep, mirroring width_depth/main.jl's sweep_onelayer.
+    w1, b1, t1 = random_mlp([2, 2, 1])
+    onelayer = mlp_to_trop(w1, b1, t1)[1]
+    results = DataFrame(Width=[2], Pre_Avg=[Float64(monomial_count(onelayer))])
     CSV.write(joinpath(output_dir, "sweep_onelayer.csv"), results)
-    return " ($(results.Pre_Avg[1]) monomials)"
+
+    # Two-layer net, mirroring the sweep_twolayer path ([2, 2, w, 1]). This
+    # exercises the deeper mlp_to_trop composition that the single-layer case skips.
+    w2, b2, t2 = random_mlp([2, 2, 2, 1])
+    twolayer = mlp_to_trop(w2, b2, t2)[1]
+    results2 = DataFrame(Width=[2], Pre_Avg=[Float64(monomial_count(twolayer))])
+    CSV.write(joinpath(output_dir, "sweep_twolayer.csv"), results2)
+
+    return " ($(results.Pre_Avg[1]) / $(results2.Pre_Avg[1]) monomials)"
 end
 
 function smoke_get_monomial_counts(model)
     weights, biases, thresholds = model_weights_biases_thresholds(model)
     f_pre = mlp_to_trop(weights, biases, thresholds)[1]
-    f_post = TropicalNN.reduce(f_pre)
+    f_post = TropicalNN.reduce(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
     return monomial_count(f_pre), monomial_count(f_post)
 end
 
@@ -169,8 +198,8 @@ function smoke_analyze_volume_epochs(data_path)
         thresholds = [Rational{BigInt}.(zeros(length(bias))) for bias in biases[1:end-1]]
 
         f_pre = mlp_to_trop(weights, biases, thresholds)[1]
-        f_post = TropicalNN.reduce(f_pre)
-        graph = get_graph(f_post)
+        f_post = TropicalNN.reduce(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
+        graph = get_graph(f_post; mode=REGION_MODE)
         edge_data = Dict("gradients"=>edge_directions(graph)["full"], "lengths"=>edge_lengths(graph)["full"])
 
         JLD2.save(joinpath(data_path, string(epoch), "graph.jld2"), "graph", graph)
@@ -220,8 +249,12 @@ function smoke_volume_dynamics_analyse()
     median_vols = Float64[]
     count_vols = Int[]
     for epoch in epochs
-        edge_data = JLD2.load(joinpath(data_path, string(epoch), "edge_data.jld2"))["data"]
-        finite_vols = filter(isfinite, Float64.(edge_data["lengths"]))
+        graph = JLD2.load(joinpath(data_path, string(epoch), "graph.jld2"))["graph"]
+        finite_vols = Float64[]
+        for vertex in vertices(graph)
+            region_volume = sum(Float64.(graph[vertex]["volume"]))
+            isfinite(region_volume) && push!(finite_vols, region_volume)
+        end
         push!(mean_vols, isempty(finite_vols) ? NaN : mean(finite_vols))
         push!(median_vols, isempty(finite_vols) ? NaN : median(finite_vols))
         push!(count_vols, length(finite_vols))
@@ -271,12 +304,44 @@ function smoke_mnist_analyse()
 
     weights, biases, thresholds = model_weights_biases_thresholds(model)
     output = mlp_to_trop(weights, biases, thresholds, quicksum=true)
-    lin_regions = linear_regions(output[1]; mode=OscarMode())
+    lin_regions = linear_regions(output[1]; mode=REGION_MODE, workers=WORKER_IDS)
     mon_count = monomial_count(output)
 
     analysis = Dict("trop_rep"=>output, "num_lin_region"=>length(lin_regions), "num_mon"=>mon_count)
     jldsave(joinpath(output_dir, "analysis_smoke.jld2"); analysis)
     return " ($(length(lin_regions)) regions, $mon_count monomials)"
+end
+
+# Exercise the distributed worker path used by the real experiments. If the
+# smoke test was launched with --processes N (so WORKER_IDS is populated) every
+# step above already ran distributed; this step additionally checks that the
+# parallel results agree with the serial ones on a net large enough to actually
+# chunk across workers, spinning up its own workers when none were requested.
+function smoke_distributed()
+    weights, biases, thresholds = random_mlp([2, 4, 1])
+    f = mlp_to_trop(weights, biases, thresholds)[1]
+
+    serial_regions = length(linear_regions(f; mode=REGION_MODE))
+    serial_reduced = monomial_count(TropicalNN.reduce(f; mode=REGION_MODE))
+
+    owned_workers = Int[]
+    worker_pool = WORKER_IDS
+    if worker_pool === nothing
+        owned_workers = Distributed.addprocs(2; exeflags="--project=$(Base.active_project())")
+        _configure_worker_environment!(owned_workers, EXPERIMENT_RUNTIME.highs_threads)
+        _load_tropicalnn_on_workers!(owned_workers)
+        worker_pool = Distributed.WorkerPool(owned_workers)
+    end
+
+    try
+        par_regions = length(linear_regions(f; mode=REGION_MODE, workers=worker_pool))
+        par_reduced = monomial_count(TropicalNN.reduce(f; mode=REGION_MODE, workers=worker_pool))
+        @assert par_regions == serial_regions "distributed linear_regions ($par_regions) != serial ($serial_regions)"
+        @assert par_reduced == serial_reduced "distributed reduce ($par_reduced) != serial ($serial_reduced)"
+        return " ($(length(Distributed.workers(worker_pool))) workers, regions=$par_regions, reduced monomials=$par_reduced)"
+    finally
+        isempty(owned_workers) || Distributed.rmprocs(owned_workers)
+    end
 end
 
 function main()
@@ -289,6 +354,7 @@ function main()
     run_step("volume_dynamics/analyse.jl", smoke_volume_dynamics_analyse)
     run_step("mnist/main.jl", smoke_mnist_main)
     run_step("mnist/analyse.jl", smoke_mnist_analyse)
+    run_step("distributed workers", smoke_distributed)
 end
 
 main()

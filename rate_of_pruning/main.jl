@@ -1,8 +1,14 @@
+include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
+const EXPERIMENT_RUNTIME = setup_experiment!()
+
 using Flux
 using TropicalNN
 using DataFrames
 using CSV
 using Logging
+
+const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
+const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
 global_logger(SimpleLogger(stderr, Logging.Error))
 
@@ -48,45 +54,46 @@ function get_monomial_counts(model)
     t = [Rational{BigInt}.(zeros(length(bias))) for bias in b[1:end-1]]
 
     f_pre  = mlp_to_trop(w, b, t)[1]
-    f_post = TropicalNN.reduce(f_pre)
+    f_post = TropicalNN.reduce(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
 
     return monomial_count(f_pre), monomial_count(f_post)
 end
 
 function run_experiment()
     widths = [2, 3, 4, 5, 6, 7, 8]
-    num_trials = 3
-    
+    num_trials = 30
+
     results = DataFrame(
         Width = Int[],
         Rate_Init = Float64[],
         Rate_Trained = Float64[]
     )
 
-    X_train, X_test, Y_train, Y_test = generate_data()
-    X_train_mat = Matrix(X_train')
-    Y_train_mat = reshape(Y_train, 1, :)
-
     batch_size = 16
     lr = 1e-3
     max_epochs = 200
-
-    loader = Flux.DataLoader(
-        (X_train_mat, Y_train_mat),
-        batchsize=batch_size,
-        shuffle=true
-    )
 
     loss(m, x, y) = Flux.binarycrossentropy(m(x), y)
 
     for width in widths
         println("Processing width: $width")
-        
+
         sum_rate_init = 0.0
         sum_rate_trained = 0.0
-        
+
         for trial in 1:num_trials
-            # 1. Initialize
+            # 1. Generate a fresh dataset for this trial
+            X_train, X_test, Y_train, Y_test = generate_data()
+            X_train_mat = Matrix(X_train')
+            Y_train_mat = reshape(Y_train, 1, :)
+
+            loader = Flux.DataLoader(
+                (X_train_mat, Y_train_mat),
+                batchsize=batch_size,
+                shuffle=true
+            )
+
+            # 2. Initialize
             w_init, b_init, t_init = random_mlp([2, width, 1])
             model = Chain(
                 Dense(w_init[1], b_init[1], relu),
@@ -94,11 +101,11 @@ function run_experiment()
                 σ
             )
 
-            # 2. Compute Init Rate
+            # 3. Compute Init Rate
             pre_init, post_init = get_monomial_counts(model)
             sum_rate_init += (pre_init - post_init) / pre_init
 
-            # 3. Train
+            # 4. Train
             opt_state = Flux.setup(Flux.Adam(lr), model)
             for epoch in 1:max_epochs
                 for (x_batch, y_batch) in loader
@@ -107,12 +114,12 @@ function run_experiment()
                 end
             end
 
-            # 4. Compute Trained Rate
+            # 5. Compute Trained Rate
             pre_trained, post_trained = get_monomial_counts(model)
             sum_rate_trained += (pre_trained - post_trained) / pre_trained
         end
-        
-        # 5. Average the rates
+
+        # 6. Average the rates
         avg_rate_init = sum_rate_init / num_trials
         avg_rate_trained = sum_rate_trained / num_trials
 
