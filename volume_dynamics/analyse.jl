@@ -8,7 +8,7 @@ using TropicalNN
 function bounded_region_volumes(graph)
     region_volumes = Float64[]
 
-    for vertex in vertices(graph)
+    for vertex in Graphs.vertices(graph)
         # A graph vertex represents one connected linear region. Its metadata
         # stores one volume per constituent polyhedron, so these must be summed
         # before computing statistics across regions.

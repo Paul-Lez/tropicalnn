@@ -111,7 +111,7 @@ end
 function smoke_get_monomial_counts(model)
     weights, biases, thresholds = model_weights_biases_thresholds(model)
     f_pre = mlp_to_trop(weights, biases, thresholds)[1]
-    f_post = TropicalNN.reduce(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
+    f_post = TropicalNN.prune(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
     return monomial_count(f_pre), monomial_count(f_post)
 end
 
@@ -198,9 +198,12 @@ function smoke_analyze_volume_epochs(data_path)
         thresholds = [Rational{BigInt}.(zeros(length(bias))) for bias in biases[1:end-1]]
 
         f_pre = mlp_to_trop(weights, biases, thresholds)[1]
-        f_post = TropicalNN.reduce(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
+        f_post = TropicalNN.prune(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
         graph = get_graph(f_post; mode=REGION_MODE)
-        edge_data = Dict("gradients"=>edge_directions(graph)["full"], "lengths"=>edge_lengths(graph)["full"])
+        edge_data = Dict(
+            "gradients"=>edge_directions(f_post; mode=REGION_MODE)["full"],
+            "lengths"=>edge_lengths(f_post; mode=REGION_MODE)["full"],
+        )
 
         JLD2.save(joinpath(data_path, string(epoch), "graph.jld2"), "graph", graph)
         JLD2.save(joinpath(data_path, string(epoch), "edge_data.jld2"), "data", edge_data)
@@ -251,7 +254,7 @@ function smoke_volume_dynamics_analyse()
     for epoch in epochs
         graph = JLD2.load(joinpath(data_path, string(epoch), "graph.jld2"))["graph"]
         finite_vols = Float64[]
-        for vertex in vertices(graph)
+        for vertex in Graphs.vertices(graph)
             region_volume = sum(Float64.(graph[vertex]["volume"]))
             isfinite(region_volume) && push!(finite_vols, region_volume)
         end
@@ -322,7 +325,7 @@ function smoke_distributed()
     f = mlp_to_trop(weights, biases, thresholds)[1]
 
     serial_regions = length(linear_regions(f; mode=REGION_MODE))
-    serial_reduced = monomial_count(TropicalNN.reduce(f; mode=REGION_MODE))
+    serial_reduced = monomial_count(TropicalNN.prune(f; mode=REGION_MODE))
 
     owned_workers = Int[]
     worker_pool = WORKER_IDS
@@ -335,9 +338,9 @@ function smoke_distributed()
 
     try
         par_regions = length(linear_regions(f; mode=REGION_MODE, workers=worker_pool))
-        par_reduced = monomial_count(TropicalNN.reduce(f; mode=REGION_MODE, workers=worker_pool))
+        par_reduced = monomial_count(TropicalNN.prune(f; mode=REGION_MODE, workers=worker_pool))
         @assert par_regions == serial_regions "distributed linear_regions ($par_regions) != serial ($serial_regions)"
-        @assert par_reduced == serial_reduced "distributed reduce ($par_reduced) != serial ($serial_reduced)"
+        @assert par_reduced == serial_reduced "distributed prune ($par_reduced) != serial ($serial_reduced)"
         return " ($(length(Distributed.workers(worker_pool))) workers, regions=$par_regions, reduced monomials=$par_reduced)"
     finally
         isempty(owned_workers) || Distributed.rmprocs(owned_workers)

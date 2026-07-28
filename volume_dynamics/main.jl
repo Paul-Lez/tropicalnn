@@ -169,13 +169,13 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
         t = [Rational{BigInt}.(zeros(length(b))) for b in biases[1:end-1]]
 
         f_pre  = mlp_to_trop(weights,biases,t)[1]
-        f_post = TropicalNN.reduce(f_pre; mode=mode, workers=workers)
+        f_post = TropicalNN.prune(f_pre; mode=mode, workers=workers)
 
         G = get_graph(f_post; mode=mode)
 
         edge_data = Dict(
-            "gradients" => edge_directions(G)["full"],
-            "lengths"   => edge_lengths(G)["full"]
+            "gradients" => edge_directions(f_post; mode=mode)["full"],
+            "lengths"   => edge_lengths(f_post; mode=mode)["full"]
         )
 
         JLD2.save("$data_path/$epoch/graph.jld2", "graph", G)

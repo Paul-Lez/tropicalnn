@@ -54,7 +54,7 @@ function get_monomial_counts(model)
     t = [Rational{BigInt}.(zeros(length(bias))) for bias in b[1:end-1]]
 
     f_pre  = mlp_to_trop(w, b, t)[1]
-    f_post = TropicalNN.reduce(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
+    f_post = TropicalNN.prune(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
 
     return monomial_count(f_pre), monomial_count(f_post)
 end
