@@ -51,27 +51,19 @@ end
 function random_tilde_matrices(rng, m_p, m_q, n)
     numerator_exponents = rand(rng, m_p, n)
     denominator_exponents = rand(rng, m_q, n)
-    return vec(tilde_matrices((numerator_exponents, denominator_exponents)))
+    return vec(TropicalNN._tilde_matrices((numerator_exponents, denominator_exponents)))
 end
 
-function sampled_lower_hoff(rng, matrix, num_samples)
-    num_rows = size(matrix, 1)
-    lower = 0.0
-    for _ in 1:num_samples
-        subset_size = rand(rng, 1:num_rows)
-        subset = randperm(rng, num_rows)[1:subset_size]
-        _, optimum = surjectivity_test(matrix[subset, :])
-        optimum > 0 && (lower = max(lower, 1 / optimum))
-    end
-    return lower
+function sampled_lower_hoff(matrix, num_samples)
+    return lower_hoffman_constant(matrix, num_samples)
 end
 
 function warm_up_algorithms()
     matrix = [1.0 0.0; 0.0 1.0; -1.0 -1.0]
-    exact_hoff(matrix)
-    pvz_hoff(matrix)
-    sampled_lower_hoff(MersenneTwister(1), matrix, 1)
-    upper_hoff(matrix)
+    hoffman_constant(matrix; brute_force=true)
+    hoffman_constant(matrix)
+    sampled_lower_hoff(matrix, 1)
+    upper_hoffman_constant(matrix)
     return nothing
 end
 
@@ -99,10 +91,11 @@ function compute_table(config;
         matrices = random_tilde_matrices(rng, config.m_p, config.m_q, config.n)
 
         lower, lower_time = matrix_statistics(
-            matrices, matrix -> sampled_lower_hoff(rng, matrix, lower_samples))
-        brute, brute_time = matrix_statistics(matrices, exact_hoff)
-        pvz, pvz_time = matrix_statistics(matrices, pvz_hoff)
-        upper, upper_time = matrix_statistics(matrices, upper_hoff)
+            matrices, matrix -> sampled_lower_hoff(matrix, lower_samples))
+        brute, brute_time = matrix_statistics(
+            matrices, matrix -> hoffman_constant(matrix; brute_force=true))
+        pvz, pvz_time = matrix_statistics(matrices, hoffman_constant)
+        upper, upper_time = matrix_statistics(matrices, upper_hoffman_constant)
 
         push!(results, (
             sample,
@@ -132,6 +125,7 @@ function run_hoffman_tables(args = ARGS)
     lower_samples > 0 || error("--hoffman-lower-samples must be positive")
 
     warm_up_algorithms()
+    Random.seed!(seed)
     rng = MersenneTwister(seed)
     mkpath(output_dir)
 

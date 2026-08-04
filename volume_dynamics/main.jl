@@ -171,7 +171,7 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
         f_pre  = mlp_to_trop(weights,biases,t)[1]
         f_post = TropicalNN.prune(f_pre; mode=mode, workers=workers)
 
-        G = get_graph(f_post; mode=mode)
+        G = TropicalNN.get_graph(f_post; mode=mode)
 
         edge_data = Dict(
             "gradients" => edge_directions(f_post; mode=mode)["full"],

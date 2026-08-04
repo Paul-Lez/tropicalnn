@@ -4,6 +4,22 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JULIA="${JULIA:-julia}"
 EXPERIMENT_ARGS=("$@")
+TROPICALNN_ROOT="$ROOT/../TropicalNN.jl"
+
+write_metadata() {
+    local git_hash
+    local tropicalnn_git_hash
+    local run_date
+
+    git_hash="$(git -C "$ROOT" rev-parse HEAD)"
+    tropicalnn_git_hash="$(git -C "$TROPICALNN_ROOT" rev-parse HEAD)"
+    run_date="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+    mkdir -p "$ROOT/outputs"
+    printf '{\n  "git_hash": "%s",\n  "date": "%s",\n  "tropicalnn_git_hash": "%s"\n}\n' \
+        "$git_hash" "$run_date" "$tropicalnn_git_hash" \
+        > "$ROOT/outputs/metadata.json"
+}
 
 run_from_root() {
     local script="$1"
@@ -19,6 +35,8 @@ run_in_dir() {
     echo "==> $dir/$script"
     (cd "$ROOT/$dir" && "$JULIA" +1.12.5 --project="$ROOT" "$script" "$@")
 }
+
+write_metadata
 
 run_in_dir "visualize_linear_regions" "main.jl" "${EXPERIMENT_ARGS[@]}"
 run_in_dir "effective_radius" "main.jl" "${EXPERIMENT_ARGS[@]}"

@@ -72,12 +72,12 @@ function smoke_effective_radius()
     rmap = mlp_to_trop(weights, biases, thresholds)[1]
 
     # The real experiment times the two Hoffman-constant algorithms against each
-    # other (brute-force exact_hoff vs. PVZ pruning pvz_hoff) and derives the
+    # other (brute-force enumeration vs. PVZ pruning) and derives the
     # effective radius from the constant. Exercise both algorithms and check they
     # agree, then compute exact_er under both LP backends.
-    hoff_exact = exact_hoff(rmap; mode=REGION_MODE)
-    hoff_pvz   = pvz_hoff(rmap; mode=REGION_MODE)
-    @assert isapprox(Float64(hoff_exact), Float64(hoff_pvz); rtol=1e-6) "exact_hoff vs pvz_hoff disagree: $hoff_exact vs $hoff_pvz"
+    hoff_exact = hoffman_constant(rmap; brute_force=true, mode=REGION_MODE)
+    hoff_pvz   = hoffman_constant(rmap; mode=REGION_MODE)
+    @assert isapprox(Float64(hoff_exact), Float64(hoff_pvz); rtol=1e-6) "brute-force vs PVZ Hoffman constants disagree: $hoff_exact vs $hoff_pvz"
 
     er_oscar = exact_er(rmap; mode=OscarMode())
     er_highs = exact_er(rmap; mode=REGION_MODE)
@@ -199,7 +199,7 @@ function smoke_analyze_volume_epochs(data_path)
 
         f_pre = mlp_to_trop(weights, biases, thresholds)[1]
         f_post = TropicalNN.prune(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
-        graph = get_graph(f_post; mode=REGION_MODE)
+        graph = TropicalNN.get_graph(f_post; mode=REGION_MODE)
         edge_data = Dict(
             "gradients"=>edge_directions(f_post; mode=REGION_MODE)["full"],
             "lengths"=>edge_lengths(f_post; mode=REGION_MODE)["full"],

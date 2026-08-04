@@ -118,7 +118,8 @@ function plot_linear_regions(linear_regions; xlims=(-10.0, 10.0), ylims=(-10.0, 
         c = cols[mod1(i, length(cols))]
 
         polys = if region isa Tuple
-            [region[1]]
+            # Signomial region enumeration returns `(monomial_index, polyhedron)`.
+            [last(region)]
         elseif !hasmethod(iterate, (typeof(region),))
             [region]
         else
