@@ -53,7 +53,7 @@ function get_monomial_counts(model)
     b = [Rational{BigInt}.(model[i].bias)   for i in 1:length(model)-1]
     t = [Rational{BigInt}.(zeros(length(bias))) for bias in b[1:end-1]]
 
-    f_pre  = mlp_to_trop(w, b, t)[1]
+    f_pre  = tropicalize(w, b, t)[1]
     f_post = TropicalNN.prune(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
 
     return monomial_count(f_pre), monomial_count(f_post)
@@ -96,7 +96,7 @@ function run_experiment()
             # 2. Initialize
             w_init, b_init, t_init = random_mlp([2, width, 1])
             model = Chain(
-                Dense(w_init[1], b_init[1], relu),
+                Dense(w_init[1], b_init[1], Flux.relu),
                 Dense(w_init[2], b_init[2], identity),
                 σ
             )

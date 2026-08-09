@@ -52,7 +52,7 @@ function smoke_visualize_linear_regions()
     mkpath(output_dir)
 
     weights, biases, thresholds = random_mlp([2, 3, 1])
-    f = mlp_to_trop(weights, biases, thresholds)[1]
+    f = tropicalize(weights, biases, thresholds)[1]
     
     counts = Int[]
     for (name, mode) in (("oscar", OscarMode()), ("highs", REGION_MODE))
@@ -69,20 +69,22 @@ function smoke_effective_radius()
     mkpath(output_dir)
 
     weights, biases, thresholds = random_mlp([2, 3, 1])
-    rmap = mlp_to_trop(weights, biases, thresholds)[1]
+    rmap = tropicalize(weights, biases, thresholds)[1]
+    rmap_oscar = prune(rmap; mode=OscarMode())
+    rmap_highs = prune(rmap; mode=REGION_MODE)
 
     # The real experiment times the two Hoffman-constant algorithms against each
     # other (brute-force enumeration vs. PVZ pruning) and derives the
     # effective radius from the constant. Exercise both algorithms and check they
     # agree, then compute exact_er under both LP backends.
-    hoff_exact = hoffman_constant(rmap; brute_force=true, mode=REGION_MODE)
-    hoff_pvz   = hoffman_constant(rmap; mode=REGION_MODE)
+    hoff_exact = hoffman_constant(rmap_highs; brute_force=true)
+    hoff_pvz   = hoffman_constant(rmap_highs)
     @assert isapprox(Float64(hoff_exact), Float64(hoff_pvz); rtol=1e-6) "brute-force vs PVZ Hoffman constants disagree: $hoff_exact vs $hoff_pvz"
 
-    er_oscar = exact_er(rmap; mode=OscarMode())
-    er_highs = exact_er(rmap; mode=REGION_MODE)
+    er_oscar = exact_er(rmap_oscar)
+    er_highs = exact_er(rmap_highs)
 
-    regions = linear_regions(rmap; mode=REGION_MODE, workers=WORKER_IDS)
+    regions = linear_regions(rmap_highs; mode=REGION_MODE, workers=WORKER_IDS)
     fig = plot_linear_regions(regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
     savefig(fig, joinpath(output_dir, "bounding_linear_regions.png"))
     return " (er_oscar=$(Float64(er_oscar)), er_highs=$(Float64(er_highs)))"
@@ -94,14 +96,14 @@ function smoke_width_depth()
 
     # One-layer sweep, mirroring width_depth/main.jl's sweep_onelayer.
     w1, b1, t1 = random_mlp([2, 2, 1])
-    onelayer = mlp_to_trop(w1, b1, t1)[1]
+    onelayer = tropicalize(w1, b1, t1)[1]
     results = DataFrame(Width=[2], Pre_Avg=[Float64(monomial_count(onelayer))])
     CSV.write(joinpath(output_dir, "sweep_onelayer.csv"), results)
 
     # Two-layer net, mirroring the sweep_twolayer path ([2, 2, w, 1]). This
-    # exercises the deeper mlp_to_trop composition that the single-layer case skips.
+    # exercises the deeper tropicalize composition that the single-layer case skips.
     w2, b2, t2 = random_mlp([2, 2, 2, 1])
-    twolayer = mlp_to_trop(w2, b2, t2)[1]
+    twolayer = tropicalize(w2, b2, t2)[1]
     results2 = DataFrame(Width=[2], Pre_Avg=[Float64(monomial_count(twolayer))])
     CSV.write(joinpath(output_dir, "sweep_twolayer.csv"), results2)
 
@@ -110,7 +112,7 @@ end
 
 function smoke_get_monomial_counts(model)
     weights, biases, thresholds = model_weights_biases_thresholds(model)
-    f_pre = mlp_to_trop(weights, biases, thresholds)[1]
+    f_pre = tropicalize(weights, biases, thresholds)[1]
     f_post = TropicalNN.prune(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
     return monomial_count(f_pre), monomial_count(f_post)
 end
@@ -124,7 +126,7 @@ function smoke_rate_of_pruning()
     Y_train_mat = reshape(Y_train, 1, :)
 
     weights, biases, _ = random_mlp([2, 1, 1])
-    model = Chain(Dense(weights[1], biases[1], relu), Dense(weights[2], biases[2], identity), σ)
+    model = Chain(Dense(weights[1], biases[1], Flux.relu), Dense(weights[2], biases[2], identity), σ)
     pre_init, post_init = smoke_get_monomial_counts(model)
 
     loader = DataLoader((X_train_mat, Y_train_mat), batchsize=2, shuffle=false)
@@ -161,7 +163,7 @@ end
 
 function smoke_train_volume_model(data_path, X_train, X_test, Y_train, Y_test)
     weights, biases, _ = random_mlp([2, 1, 1])
-    model = Chain(Dense(weights[1], biases[1], relu), Dense(weights[2], biases[2], identity), σ)
+    model = Chain(Dense(weights[1], biases[1], Flux.relu), Dense(weights[2], biases[2], identity), σ)
 
     X_train_mat = Matrix(X_train')
     Y_train_mat = reshape(Y_train, 1, :)
@@ -197,7 +199,7 @@ function smoke_analyze_volume_epochs(data_path)
         biases = JLD2.load(joinpath(data_path, string(epoch), "biases.jld2"))["data"]
         thresholds = [Rational{BigInt}.(zeros(length(bias))) for bias in biases[1:end-1]]
 
-        f_pre = mlp_to_trop(weights, biases, thresholds)[1]
+        f_pre = tropicalize(weights, biases, thresholds)[1]
         f_post = TropicalNN.prune(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
         graph = TropicalNN.get_graph(f_post; mode=REGION_MODE)
         edge_data = Dict(
@@ -281,7 +283,7 @@ function smoke_mnist_main()
     y_train = Float32[0.0 1.0 1.0 0.0]
     loader = DataLoader((X_train, y_train), batchsize=2, shuffle=false)
 
-    model = Chain(Dense(2 => 2, relu), Dense(2 => 1), sigmoid)
+    model = Chain(Dense(2 => 2, Flux.relu), Dense(2 => 1), sigmoid)
     opt_state = Flux.setup(Adam(0.005), model)
     for (x, y) in loader
         _, grads = Flux.withgradient(model) do m
@@ -301,12 +303,12 @@ end
 
 function smoke_mnist_analyse()
     output_dir = joinpath(SMOKE_ROOT, "mnist")
-    model = Chain(Dense(2 => 2, relu), Dense(2 => 1), sigmoid)
+    model = Chain(Dense(2 => 2, Flux.relu), Dense(2 => 1), sigmoid)
     model_state = JLD2.load(joinpath(output_dir, "model.jld2"), "model_state")
     Flux.loadmodel!(model, model_state)
 
     weights, biases, thresholds = model_weights_biases_thresholds(model)
-    output = mlp_to_trop(weights, biases, thresholds, quicksum=true)
+    output = tropicalize(weights, biases, thresholds, quicksum=true)
     lin_regions = linear_regions(output[1]; mode=REGION_MODE, workers=WORKER_IDS)
     mon_count = monomial_count(output)
 
@@ -322,7 +324,7 @@ end
 # chunk across workers, spinning up its own workers when none were requested.
 function smoke_distributed()
     weights, biases, thresholds = random_mlp([2, 4, 1])
-    f = mlp_to_trop(weights, biases, thresholds)[1]
+    f = tropicalize(weights, biases, thresholds)[1]
 
     serial_regions = length(linear_regions(f; mode=REGION_MODE))
     serial_reduced = monomial_count(TropicalNN.prune(f; mode=REGION_MODE))

@@ -12,13 +12,13 @@ const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 global_logger(SimpleLogger(stderr, Logging.Error))
 
 # For one random network, compute the unpruned tropical representation and the
-# layerwise-pruned one (strong_elim during construction) from the same weights.
+# layerwise-pruned one from the same weights.
 function count_monomials(dims)
     w, b, t = random_mlp(dims, symbolic=false)
 
-    t_unpruned = @elapsed f_unpruned = mlp_to_trop(w, b, t, quicksum=true, dedup=true)[1]
-    t_pruned = @elapsed f_pruned = mlp_to_trop(w, b, t, quicksum=true, dedup=true,
-        strong_elim=true, elim_mode=REGION_MODE, workers=WORKER_IDS)[1]
+    t_unpruned = @elapsed f_unpruned = tropicalize(w, b, t, quicksum=true, dedup=true)[1]
+    t_pruned = @elapsed f_pruned = tropicalize(w, b, t, quicksum=true, dedup=true,
+        prune=true, elim_mode=REGION_MODE, workers=WORKER_IDS)[1]
 
     return monomial_count(f_unpruned), monomial_count(f_pruned), t_unpruned, t_pruned
 end
@@ -28,8 +28,8 @@ function run_experiments()
     mkpath("outputs/width_depth")
 
     widths = [2, 3, 4, 5, 6, 7, 8]
-    width_results = DataFrame(Width=Int[], Unpruned_Avg=Float64[], StrongElim_Avg=Float64[],
-        Unpruned_Time_Avg=Float64[], StrongElim_Time_Avg=Float64[])
+    width_results = DataFrame(Width=Int[], Unpruned_Avg=Float64[], Pruned_Avg=Float64[],
+        Unpruned_Time_Avg=Float64[], Pruned_Time_Avg=Float64[])
 
     println("--- Starting OneLayer Sweep ---")
     for w in widths
@@ -53,8 +53,8 @@ function run_experiments()
     CSV.write("outputs/width_depth/sweep_onelayer.csv", width_results)
 
 
-    twolayer_results = DataFrame(Depth=Int[], Unpruned_Avg=Float64[], StrongElim_Avg=Float64[],
-        Unpruned_Time_Avg=Float64[], StrongElim_Time_Avg=Float64[])
+    twolayer_results = DataFrame(Depth=Int[], Unpruned_Avg=Float64[], Pruned_Avg=Float64[],
+        Unpruned_Time_Avg=Float64[], Pruned_Time_Avg=Float64[])
 
     println("\n--- Starting TwoLayer Sweep ---")
     for w in widths

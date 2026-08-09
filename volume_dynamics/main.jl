@@ -87,7 +87,7 @@ function train(data_path,X_train,X_test,Y_train,Y_test;
     w,b,t = random_mlp([2,width,1])
 
     model = Chain(
-        Dense(w[1],b[1],relu),
+        Dense(w[1],b[1],Flux.relu),
         Dense(w[2],b[2],identity),
         σ
     )
@@ -168,7 +168,7 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
 
         t = [Rational{BigInt}.(zeros(length(b))) for b in biases[1:end-1]]
 
-        f_pre  = mlp_to_trop(weights,biases,t)[1]
+        f_pre  = tropicalize(weights,biases,t)[1]
         f_post = TropicalNN.prune(f_pre; mode=mode, workers=workers)
 
         G = TropicalNN.get_graph(f_post; mode=mode)

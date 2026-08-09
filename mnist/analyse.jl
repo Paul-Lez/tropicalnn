@@ -32,7 +32,7 @@ function extract_weights_biases_thresholds(model, symbolic=true)
 end
 
 # 1. Define the exact same architecture that was trained
-model = Chain(Dense(28^2 => width, relu), Dense(width => width2, relu), Dense(width2 => 1), sigmoid)
+model = Chain(Dense(28^2 => width, Flux.relu), Dense(width => width2, Flux.relu), Dense(width2 => 1), sigmoid)
 
 # 2. Load the state into the model
 println("Loading trained model...")
@@ -47,8 +47,8 @@ start_time = time()
 weights, biases, thresholds = extract_weights_biases_thresholds(model, false)
 
 println("Computing tropical representation...")
-output = TropicalNN.mlp_to_trop(weights, biases, thresholds, quicksum=true,
-    strong_elim=true, dedup=true, elim_mode=REGION_MODE, workers=WORKER_IDS)
+output = TropicalNN.tropicalize(weights, biases, thresholds, quicksum=true,
+    prune=true, dedup=true, elim_mode=REGION_MODE, workers=WORKER_IDS)
 println("Got tropical representation!")
 
 println("Enumerating linear regions...")

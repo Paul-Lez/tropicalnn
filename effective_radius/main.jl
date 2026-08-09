@@ -14,18 +14,20 @@ output_dir = "../outputs/effective_radius/"
 mkpath(output_dir)
 
 w, b, t = random_mlp([2, 4, 1])
-rmap = mlp_to_trop(w, b, t)[1]
+rmap = tropicalize(w, b, t)[1]
 
 # --- Hoffman-constant algorithm comparison -------------------------------
 # Compute the Hoffman constant two ways and time each: exhaustive row-subset
 # enumeration vs. the default PVZ pruning algorithm.
-let warmup = mlp_to_trop(random_mlp([2, 2, 1])...)[1]
-    hoffman_constant(warmup; brute_force=true, mode=REGION_MODE)
-    hoffman_constant(warmup; mode=REGION_MODE)
+let warmup = tropicalize(random_mlp([2, 2, 1])...)[1]
+    warmup = prune(warmup; mode=REGION_MODE)
+    hoffman_constant(warmup; brute_force=true)
+    hoffman_constant(warmup)
 end
 
-t_exact = @elapsed hoff_exact = hoffman_constant(rmap; brute_force=true, mode=REGION_MODE)
-t_pvz   = @elapsed hoff_pvz   = hoffman_constant(rmap; mode=REGION_MODE)
+rmap = prune(rmap; mode=REGION_MODE)
+t_exact = @elapsed hoff_exact = hoffman_constant(rmap; brute_force=true)
+t_pvz   = @elapsed hoff_pvz   = hoffman_constant(rmap)
 
 isapprox(Float64(hoff_exact), Float64(hoff_pvz); rtol=1e-6) ||
     error("Hoffman constants disagree: brute_force=$hoff_exact, pvz=$hoff_pvz")
@@ -42,7 +44,7 @@ hoffman_timings = DataFrame(
 CSV.write(joinpath(output_dir, "hoffman_timings.csv"), hoffman_timings)
 
 # --- Effective radius + linear-region visualization ----------------------
-er = exact_er(rmap; mode=REGION_MODE)
+er = exact_er(rmap)
 regions = linear_regions(rmap; mode=REGION_MODE, workers=WORKER_IDS)
 
 margin_limit = Float64(er * 1.2)
