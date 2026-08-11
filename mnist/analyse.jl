@@ -8,14 +8,13 @@ using JLD2
 const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
 const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
-# Set the widths of the hidden layers of the neural network (must match main.jl)
-width = 5
-width2 = 5
+# Set the hidden width of the neural network (must match main.jl).
+width = 4
 
 # Function to extract the parameters required to compute the tropical representation
 function extract_weights_biases_thresholds(model, symbolic=true)
-    # The loop goes up to length(model)-1 to deliberately skip the final 'sigmoid' layer,
-    # because sigmoid does not have learnable weights/biases and isn't piecewise linear.
+    # Skip the final softmax layer because it has no learnable parameters and
+    # is not piecewise linear.
     num_dense_layers = length(model) - 1 
     
     if symbolic
@@ -32,7 +31,7 @@ function extract_weights_biases_thresholds(model, symbolic=true)
 end
 
 # 1. Define the exact same architecture that was trained
-model = Chain(Dense(28^2 => width, Flux.relu), Dense(width => width2, Flux.relu), Dense(width2 => 1), sigmoid)
+model = Chain(Dense(28^2 => width, Flux.relu), Dense(width => 10), softmax)
 
 # 2. Load the state into the model
 println("Loading trained model...")
@@ -76,6 +75,6 @@ output_dir = "outputs/mnist"
 mkpath(output_dir)
 
 # Using jldsave to explicitly save the dictionary object into the file
-jldsave(joinpath(output_dir, "analysis_$(width)_$(width2).jld2"); analysis)
+jldsave(joinpath(output_dir, "analysis_$width.jld2"); analysis)
 
 println("Done!")

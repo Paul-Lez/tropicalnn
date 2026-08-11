@@ -22,7 +22,7 @@ end
 
 function run_experiment()
     monomial_counts = [20, 50, 100, 200, 350, 500, 800, 1000]
-    samples_per_nvars = [3 => 15, 4 => 15]
+    samples_per_nvars = [3 => 30, 4 => 30]
 
     output_dir = "outputs/random_rational_regions"
     mkpath(output_dir)
@@ -33,18 +33,32 @@ function run_experiment()
         println("--- Linear regions of random rational signomials, $n_vars variables ---")
         for n_mons in monomial_counts
             println("Processing $n_mons monomials (num and den)")
-            for s in 1:n_samples
+            successful_samples = 0
+            attempts = 0
+            while successful_samples < n_samples
+                attempts += 1
                 q = random_rational_signomial(n_vars, n_mons)
+
+                regions = nothing
+                elapsed = 0.0
                 try
-                    t = @elapsed regions = TropicalNN.linear_regions(q;
+                    elapsed = @elapsed regions = TropicalNN.linear_regions(q;
                         mode=REGION_MODE, workers=WORKER_IDS)
-                    push!(results, (n_vars, n_mons, s, length(regions), t))
-                    println("  sample $s/$n_samples: $(length(regions)) regions",
-                        " in $(round(t, digits=2)) s")
                 catch err
-                    println("  sample $s/$n_samples FAILED: $(sprint(showerror, err))")
+                    next_sample = successful_samples + 1
+                    println("  attempt $attempts for sample $next_sample/$n_samples FAILED; ",
+                        "retrying: $(sprint(showerror, err))")
+                    continue
                 end
-                # Checkpoint after every sample, like the original experiment
+
+                successful_samples += 1
+                push!(results, (n_vars, n_mons, successful_samples,
+                    length(regions), elapsed))
+                println("  sample $successful_samples/$n_samples: ",
+                    "$(length(regions)) regions in $(round(elapsed, digits=2)) s",
+                    " (attempt $attempts)")
+
+                # Checkpoint after every successful sample.
                 CSV.write(joinpath(output_dir, "results.csv"), results)
             end
             write_averages(results, output_dir)

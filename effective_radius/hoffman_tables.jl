@@ -68,7 +68,7 @@ function warm_up_algorithms()
 end
 
 function compute_table(config;
-        num_samples = 15,
+        num_samples = 30,
         lower_samples = 100,
         rng = Random.default_rng(),
 )
@@ -115,14 +115,11 @@ function compute_table(config;
 end
 
 function run_hoffman_tables(args = ARGS)
-    num_samples = parse(Int, option_value(args, "--hoffman-samples", "15"))
+    num_samples = parse(Int, option_value(args, "--hoffman-samples", "30"))
     lower_samples = parse(Int, option_value(args, "--hoffman-lower-samples", "100"))
     seed = parse(Int, option_value(args, "--hoffman-seed", "2024"))
     default_output = joinpath(@__DIR__, "..", "outputs", "effective_radius")
     output_dir = option_value(args, "--hoffman-output", default_output)
-
-    num_samples > 0 || error("--hoffman-samples must be positive")
-    lower_samples > 0 || error("--hoffman-lower-samples must be positive")
 
     warm_up_algorithms()
     Random.seed!(seed)
