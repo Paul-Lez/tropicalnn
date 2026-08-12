@@ -3,9 +3,9 @@ const EXPERIMENT_RUNTIME = setup_experiment!()
 
 using CSV
 using DataFrames
-using Flux
+import Flux
 using Flux: DataLoader
-using Graphs
+import Graphs
 using JLD2
 using MLDatasets
 using Plots
@@ -70,8 +70,8 @@ function smoke_effective_radius()
 
     weights, biases, thresholds = random_mlp([2, 3, 1])
     rmap = tropicalize(weights, biases, thresholds)[1]
-    rmap_oscar = prune(rmap; mode=OscarMode())
-    rmap_highs = prune(rmap; mode=REGION_MODE)
+    rmap_oscar = TropicalNN.prune(rmap; mode=OscarMode())
+    rmap_highs = TropicalNN.prune(rmap; mode=REGION_MODE)
 
     # The real experiment times the two Hoffman-constant algorithms against each
     # other (brute-force enumeration vs. PVZ pruning) and derives the
@@ -126,7 +126,11 @@ function smoke_rate_of_pruning()
     Y_train_mat = reshape(Y_train, 1, :)
 
     weights, biases, _ = random_mlp([2, 1, 1])
-    model = Chain(Dense(weights[1], biases[1], Flux.relu), Dense(weights[2], biases[2], identity), σ)
+    model = Flux.Chain(
+        Flux.Dense(weights[1], biases[1], Flux.relu),
+        Flux.Dense(weights[2], biases[2], identity),
+        Flux.σ,
+    )
     pre_init, post_init = smoke_get_monomial_counts(model)
 
     loader = DataLoader((X_train_mat, Y_train_mat), batchsize=2, shuffle=false)
@@ -163,7 +167,11 @@ end
 
 function smoke_train_volume_model(data_path, X_train, X_test, Y_train, Y_test)
     weights, biases, _ = random_mlp([2, 1, 1])
-    model = Chain(Dense(weights[1], biases[1], Flux.relu), Dense(weights[2], biases[2], identity), σ)
+    model = Flux.Chain(
+        Flux.Dense(weights[1], biases[1], Flux.relu),
+        Flux.Dense(weights[2], biases[2], identity),
+        Flux.σ,
+    )
 
     X_train_mat = Matrix(X_train')
     Y_train_mat = reshape(Y_train, 1, :)
@@ -283,8 +291,8 @@ function smoke_mnist_main()
     y_train = Float32[0.0 1.0 1.0 0.0]
     loader = DataLoader((X_train, y_train), batchsize=2, shuffle=false)
 
-    model = Chain(Dense(2 => 2, Flux.relu), Dense(2 => 1), sigmoid)
-    opt_state = Flux.setup(Adam(0.005), model)
+    model = Flux.Chain(Flux.Dense(2 => 2, Flux.relu), Flux.Dense(2 => 1), Flux.sigmoid)
+    opt_state = Flux.setup(Flux.Adam(0.005), model)
     for (x, y) in loader
         _, grads = Flux.withgradient(model) do m
             mean(Flux.binarycrossentropy(m(x), y))
@@ -303,7 +311,7 @@ end
 
 function smoke_mnist_analyse()
     output_dir = joinpath(SMOKE_ROOT, "mnist")
-    model = Chain(Dense(2 => 2, Flux.relu), Dense(2 => 1), sigmoid)
+    model = Flux.Chain(Flux.Dense(2 => 2, Flux.relu), Flux.Dense(2 => 1), Flux.sigmoid)
     model_state = JLD2.load(joinpath(output_dir, "model.jld2"), "model_state")
     Flux.loadmodel!(model, model_state)
 

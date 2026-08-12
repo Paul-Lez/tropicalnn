@@ -1,8 +1,8 @@
 using TropicalNN
 using Plots
 using Plots.PlotMeasures
-using Oscar
-using LinearAlgebra
+import Oscar
+import LinearAlgebra
 
 function _hrep_vertices_2d(A, b; tol=1e-8)
     size(A, 2) == 2 ||
@@ -12,7 +12,7 @@ function _hrep_vertices_2d(A, b; tol=1e-8)
     for i in 1:(size(A, 1) - 1)
         for j in (i + 1):size(A, 1)
             M = [A[i, 1] A[i, 2]; A[j, 1] A[j, 2]]
-            abs(det(M)) <= tol && continue
+            abs(LinearAlgebra.det(M)) <= tol && continue
 
             x = M \ [b[i], b[j]]
             if all(A * x .<= b .+ tol)
@@ -23,7 +23,7 @@ function _hrep_vertices_2d(A, b; tol=1e-8)
 
     unique_points = Vector{Vector{Float64}}()
     for point in points
-        if !any(existing -> norm(existing - point, Inf) <= tol, unique_points)
+        if !any(existing -> LinearAlgebra.norm(existing - point, Inf) <= tol, unique_points)
             push!(unique_points, point)
         end
     end

@@ -1,7 +1,7 @@
 include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
 const EXPERIMENT_RUNTIME = setup_experiment!()
 
-using Flux
+import Flux
 using TropicalNN
 using DataFrames
 using CSV
@@ -95,10 +95,10 @@ function run_experiment()
 
             # 2. Initialize
             w_init, b_init, t_init = random_mlp([2, width, 1])
-            model = Chain(
-                Dense(w_init[1], b_init[1], Flux.relu),
-                Dense(w_init[2], b_init[2], identity),
-                σ
+            model = Flux.Chain(
+                Flux.Dense(w_init[1], b_init[1], Flux.relu),
+                Flux.Dense(w_init[2], b_init[2], identity),
+                Flux.σ
             )
 
             # 3. Compute Init Rate

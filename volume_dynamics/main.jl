@@ -1,7 +1,7 @@
 include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
 const EXPERIMENT_RUNTIME = setup_experiment!()
 
-using Flux
+import Flux
 using Graphs
 using JLD2
 using TropicalNN
@@ -86,10 +86,10 @@ function train(data_path,X_train,X_test,Y_train,Y_test;
 
     w,b,t = random_mlp([2,width,1])
 
-    model = Chain(
-        Dense(w[1],b[1],Flux.relu),
-        Dense(w[2],b[2],identity),
-        σ
+    model = Flux.Chain(
+        Flux.Dense(w[1],b[1],Flux.relu),
+        Flux.Dense(w[2],b[2],identity),
+        Flux.σ
     )
 
     X_train_mat = Matrix(X_train')         

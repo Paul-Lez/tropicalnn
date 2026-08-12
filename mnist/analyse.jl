@@ -2,7 +2,7 @@ include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
 const EXPERIMENT_RUNTIME = setup_experiment!()
 
 using TropicalNN
-using Flux
+import Flux
 using JLD2
 
 const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
@@ -31,7 +31,11 @@ function extract_weights_biases_thresholds(model, symbolic=true)
 end
 
 # 1. Define the exact same architecture that was trained
-model = Chain(Dense(28^2 => width, Flux.relu), Dense(width => 10), softmax)
+model = Flux.Chain(
+    Flux.Dense(28^2 => width, Flux.relu),
+    Flux.Dense(width => 10),
+    Flux.softmax,
+)
 
 # 2. Load the state into the model
 println("Loading trained model...")
