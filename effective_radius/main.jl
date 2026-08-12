@@ -20,12 +20,12 @@ rmap = tropicalize(w, b, t)[1]
 # Compute the Hoffman constant two ways and time each: exhaustive row-subset
 # enumeration vs. the default PVZ pruning algorithm.
 let warmup = tropicalize(random_mlp([2, 2, 1])...)[1]
-    warmup = prune(warmup; mode=REGION_MODE)
+    warmup = TropicalNN.prune(warmup; mode=REGION_MODE)
     hoffman_constant(warmup; brute_force=true)
     hoffman_constant(warmup)
 end
 
-rmap = prune(rmap; mode=REGION_MODE)
+rmap = TropicalNN.prune(rmap; mode=REGION_MODE)
 t_exact = @elapsed hoff_exact = hoffman_constant(rmap; brute_force=true)
 t_pvz   = @elapsed hoff_pvz   = hoffman_constant(rmap)
 
