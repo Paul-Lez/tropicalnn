@@ -83,11 +83,15 @@ function smoke_effective_radius()
 
     er_oscar = exact_er(rmap_oscar)
     er_highs = exact_er(rmap_highs)
+    er_upper = upper_er(rmap_highs)
 
     regions = linear_regions(rmap_highs; mode=REGION_MODE, workers=WORKER_IDS)
-    fig = plot_linear_regions(regions, xlims=(-2.0, 2.0), ylims=(-2.0, 2.0))
-    savefig(fig, joinpath(output_dir, "bounding_linear_regions.png"))
-    return " (er_oscar=$(Float64(er_oscar)), er_highs=$(Float64(er_highs)))"
+    exact_fig = plot_radius_bound(regions, er_highs)
+    savefig(exact_fig, joinpath(output_dir, "bounding_linear_regions.png"))
+
+    upper_fig = plot_radius_bound(regions, er_upper)
+    savefig(upper_fig, joinpath(output_dir, "bounding_linear_regions_upper_er.png"))
+    return " (er_oscar=$(Float64(er_oscar)), er_highs=$(Float64(er_highs)), er_upper=$(Float64(er_upper)))"
 end
 
 function smoke_width_depth()

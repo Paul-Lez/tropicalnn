@@ -43,21 +43,15 @@ hoffman_timings = DataFrame(
 )
 CSV.write(joinpath(output_dir, "hoffman_timings.csv"), hoffman_timings)
 
-# --- Effective radius + linear-region visualization ----------------------
-er = exact_er(rmap)
+# --- Effective-radius bounds + linear-region visualizations --------------
+exact_radius_bound = exact_er(rmap)
+upper_radius_bound = upper_er(rmap)
 regions = linear_regions(rmap; mode=REGION_MODE, workers=WORKER_IDS)
 
-margin_limit = Float64(er * 1.2)
-println(margin_limit)
-fig = plot_linear_regions(regions, xlims=(-margin_limit, margin_limit), ylims=(-margin_limit, margin_limit))
+println("Exact-Hoffman effective-radius bound: ", Float64(exact_radius_bound))
+exact_fig = plot_radius_bound(regions, exact_radius_bound)
+savefig(exact_fig, joinpath(output_dir, "bounding_linear_regions.png"))
 
-sq_x = [er, -er, -er,  er, er]
-sq_y = [er,  er, -er, -er, er]
-
-plot!(fig, sq_x, sq_y, 
-      color=:red, 
-      linewidth=2.5, 
-      linestyle=:dash, 
-      label="Effective Radius Square")
-
-savefig(fig, joinpath(output_dir, "bounding_linear_regions.png"))
+println("Upper-Hoffman effective-radius bound: ", Float64(upper_radius_bound))
+upper_fig = plot_radius_bound(regions, upper_radius_bound)
+savefig(upper_fig, joinpath(output_dir, "bounding_linear_regions_upper_er.png"))

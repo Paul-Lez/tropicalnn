@@ -137,3 +137,21 @@ function plot_linear_regions(linear_regions; xlims=(-10.0, 10.0), ylims=(-10.0, 
     
     return p
 end
+
+"""Plot linear regions together with an infinity-norm radius-bound square."""
+function plot_radius_bound(linear_regions, radius)
+    radius_value = Float64(radius)
+    margin_limit = 1.2 * radius_value
+    fig = plot_linear_regions(linear_regions;
+        xlims=(-margin_limit, margin_limit),
+        ylims=(-margin_limit, margin_limit))
+
+    square_x = [radius_value, -radius_value, -radius_value, radius_value, radius_value]
+    square_y = [radius_value, radius_value, -radius_value, -radius_value, radius_value]
+    plot!(fig, square_x, square_y;
+        color=:red,
+        linewidth=2.5,
+        linestyle=:dash,
+        label=false)
+    return fig
+end
