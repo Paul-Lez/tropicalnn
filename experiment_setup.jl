@@ -51,8 +51,8 @@ function _configure_worker_environment!(worker_ids, threads::Int)
 end
 
 function _load_tropicalnn_on_workers!(worker_ids)
-    for pid in worker_ids
-        remotecall_wait(pid) do
+    @sync for pid in worker_ids
+        @async remotecall_wait(pid) do
             Base.eval(Main, :(using TropicalNN))
         end
     end
