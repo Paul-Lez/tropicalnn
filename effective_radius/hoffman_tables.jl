@@ -7,6 +7,8 @@ const HOFFMAN_WORKERS = tropical_workers(EXPERIMENT_RUNTIME)
 using CSV
 using DataFrames
 
+include(joinpath(@__DIR__, "hoffman_summary.jl"))
+
 @everywhere begin
     using LinearAlgebra
     using Random
@@ -159,6 +161,7 @@ function run_hoffman_tables(args = ARGS)
     seed = parse(Int, option_value(args, "--hoffman-seed", "2024"))
     default_output = joinpath(@__DIR__, "..", "outputs", "effective_radius")
     output_dir = option_value(args, "--hoffman-output", default_output)
+    configurations = selected_configurations(args)
 
     warm_up_sample_workers(HOFFMAN_WORKERS)
     rng = MersenneTwister(seed)
@@ -170,7 +173,8 @@ function run_hoffman_tables(args = ARGS)
             length(Distributed.workers(HOFFMAN_WORKERS)), " workers")
     end
 
-    for config in selected_configurations(args)
+    tables = DataFrame[]
+    for config in configurations
         println("Hoffman table: m_p=$(config.m_p), m_q=$(config.m_q), n=$(config.n)")
         results = compute_table(config;
             num_samples = num_samples,
@@ -182,8 +186,12 @@ function run_hoffman_tables(args = ARGS)
         filename = "table_mp$(config.m_p)_mq$(config.m_q)_n$(config.n).csv"
         output_path = joinpath(output_dir, filename)
         CSV.write(output_path, results)
+        push!(tables, results)
         println("Saved $output_path")
     end
+
+    summary_path = write_hoffman_summary(output_dir, configurations, tables)
+    println("Saved $summary_path")
 end
 
 run_hoffman_tables()
