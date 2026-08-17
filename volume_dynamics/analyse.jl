@@ -140,6 +140,25 @@ function export_to_csvs(data_path="outputs/volume_dynamics")
     CSV.write("$data_path/polyhedra_stats.csv", df_polys)
     println("Saved polyhedra_stats.csv")
 
+    # -------------------------------
+    # 5. Hoffman Constants
+    # -------------------------------
+    hoffman_path = joinpath(data_path, "hoffman_data.jld2")
+    if isfile(hoffman_path)
+        println("Loading Hoffman constants...")
+        hoffman_data = JLD2.load(hoffman_path)["data"]
+        # main.jl computes one constant per epoch directory, in sorted order, so
+        # the entries line up with `epochs`; a mismatch means the file is stale.
+        length(hoffman_data) == length(epochs) ||
+            error("Hoffman constant history does not match the epoch directories")
+        df_hoffman = DataFrame(
+            Epoch = epochs,
+            Hoffman_Constant = hoffman_data
+        )
+        CSV.write(joinpath(data_path, "hoffman_constants.csv"), df_hoffman)
+        println("Saved hoffman_constants.csv")
+    end
+
     println("All CSV data exported successfully!")
 end
 

@@ -183,6 +183,7 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
     epochs = sort(parse.(Int, filter(x->!occursin(".",x), readdir(data_path))))
 
     monomial_data = Dict("pre"=>[],"post"=>[])
+    hoffman_data = Float64[]
 
     counts = _epoch_map(epochs, workers) do epoch
 
@@ -211,15 +212,21 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
         JLD2.save("$data_path/$epoch/edge_data.jld2", "data", edge_data)
         JLD2.save("$data_path/$epoch/polyhedra_data.jld2", "data", polyhedra_data(regions))
 
-        return (monomial_count(f_pre), monomial_count(f_post))
+        # The network has two inputs, so the Hoffman maximum is attained on a row subset of
+        # size at most two: exhaustive enumeration is exact and far cheaper than PVZ here.
+        hoffman = hoffman_constant(f_post; brute_force=true, mode=mode)
+
+        return (monomial_count(f_pre), monomial_count(f_post), hoffman)
     end
 
-    for (pre, post) in counts
+    for (pre, post, hoffman) in counts
         push!(monomial_data["pre"],  pre)
         push!(monomial_data["post"], post)
+        push!(hoffman_data, hoffman)
     end
 
     JLD2.save("$data_path/monomial_data.jld2","data",monomial_data)
+    JLD2.save("$data_path/hoffman_data.jld2","data",hoffman_data)
 end
 
 # -------------------------------
