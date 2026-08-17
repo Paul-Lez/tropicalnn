@@ -53,8 +53,12 @@ function export_to_csvs(data_path="outputs/volume_dynamics")
         num_monomial_epochs = length(monomial_data["pre"])
         length(monomial_data["post"]) == num_monomial_epochs ||
             error("Pre- and post-pruning monomial histories have different lengths")
+        # main.jl computes one count per epoch directory, in sorted order, so
+        # the entries line up with `epochs`; a mismatch means the file is stale.
+        num_monomial_epochs == length(epochs) ||
+            error("Monomial count history does not match the epoch directories")
         df_mono = DataFrame(
-            Epoch = 0:(num_monomial_epochs - 1),
+            Epoch = epochs,
             Pre_Pruning = monomial_data["pre"],
             Post_Pruning = monomial_data["post"]
         )
