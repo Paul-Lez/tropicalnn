@@ -3,7 +3,7 @@ const EXPERIMENT_RUNTIME = setup_experiment!()
 
 import Flux
 using Graphs
-using JLD2
+@everywhere using JLD2
 using TropicalNN
 using Logging
 
@@ -153,15 +153,21 @@ end
 # Tropical analysis
 # -------------------------------
 
+# Spread the per-epoch analysis over the worker pool when there is one.
+_epoch_map(f, epochs, workers) = pmap(f, workers, epochs)
+_epoch_map(f, epochs, ::Nothing) = map(f, epochs)
+
 function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
 
     epochs = sort(parse.(Int, filter(x->!occursin(".",x), readdir(data_path))))
 
     monomial_data = Dict("pre"=>[],"post"=>[])
 
-    for epoch in epochs
+    counts = _epoch_map(epochs, workers) do epoch
 
-        println("Analyzing epoch $epoch")
+        # Epochs run concurrently on the worker pool, so tag each progress line
+        # with the worker it came from to keep the interleaved log readable.
+        println("[worker $(myid())] Analyzing epoch $epoch")
 
         weights = JLD2.load("$data_path/$epoch/weights.jld2")["data"]
         biases  = JLD2.load("$data_path/$epoch/biases.jld2")["data"]
@@ -169,7 +175,7 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
         t = [Rational{BigInt}.(zeros(length(b))) for b in biases[1:end-1]]
 
         f_pre  = tropicalize(weights,biases,t)[1]
-        f_post = TropicalNN.prune(f_pre; mode=mode, workers=workers)
+        f_post = TropicalNN.prune(f_pre; mode=mode)
 
         # Compute the subdivision once, then read every statistic off it.
         regions = TropicalNN.map_statistic(identity, f_post; mode=mode)
@@ -183,8 +189,12 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
         JLD2.save("$data_path/$epoch/graph.jld2", "graph", G)
         JLD2.save("$data_path/$epoch/edge_data.jld2", "data", edge_data)
 
-        push!(monomial_data["pre"],  monomial_count(f_pre))
-        push!(monomial_data["post"], monomial_count(f_post))
+        return (monomial_count(f_pre), monomial_count(f_post))
+    end
+
+    for (pre, post) in counts
+        push!(monomial_data["pre"],  pre)
+        push!(monomial_data["post"], post)
     end
 
     JLD2.save("$data_path/monomial_data.jld2","data",monomial_data)
