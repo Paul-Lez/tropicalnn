@@ -99,6 +99,47 @@ function export_to_csvs(data_path="outputs/volume_dynamics")
     
     CSV.write("$data_path/finite_volumes_stats.csv", df_vols)
     println("Saved finite_volumes_stats.csv")
+
+    # -------------------------------
+    # 4. Polyhedral Subdivision Stats
+    # -------------------------------
+    println("Calculating polyhedra statistics per epoch...")
+
+    df_polys = DataFrame(
+        Epoch = Int[],
+        Linear_Region_Count = Int[],
+        Bounded_Region_Count = Int[],
+        Unbounded_Region_Count = Int[],
+        Polyhedron_Count = Int[],
+        Mean_Vertices = Float64[],
+        Max_Vertices = Int[],
+        Mean_Facets = Float64[],
+        Max_Facets = Int[],
+        Mean_Rays = Float64[]
+    )
+
+    for epoch in epochs
+        polyhedra_path = joinpath(data_path, "$epoch", "polyhedra_data.jld2")
+        isfile(polyhedra_path) || continue
+        # One entry per linear region, and one entry per polyhedron of the subdivision.
+        data = JLD2.load(polyhedra_path)["data"]
+        push!(df_polys, (
+            epoch,
+            length(data["polyhedra_per_region"]),
+            count(data["bounded"]),
+            count(!, data["bounded"]),
+            sum(data["polyhedra_per_region"]),
+            mean(data["vertices"]),
+            maximum(data["vertices"]),
+            mean(data["facets"]),
+            maximum(data["facets"]),
+            mean(data["rays"])
+        ))
+    end
+
+    CSV.write("$data_path/polyhedra_stats.csv", df_polys)
+    println("Saved polyhedra_stats.csv")
+
     println("All CSV data exported successfully!")
 end
 

@@ -4,6 +4,7 @@ const EXPERIMENT_RUNTIME = setup_experiment!()
 import Flux
 using Graphs
 @everywhere using JLD2
+@everywhere import Oscar
 using TropicalNN
 using Logging
 
@@ -153,6 +154,26 @@ end
 # Tropical analysis
 # -------------------------------
 
+# Sizes of the polyhedra making up the subdivision underlying the linear regions.
+@everywhere function polyhedra_data(linear_regions)
+
+    data = Dict{String,Vector}("polyhedra_per_region"=>Int[],"bounded"=>Bool[],
+                               "vertices"=>Int[],"facets"=>Int[],"rays"=>Int[])
+
+    for components in values(linear_regions), polys in components
+        push!(data["polyhedra_per_region"], length(polys))
+        # A region is bounded exactly when every polyhedron it is glued from is.
+        push!(data["bounded"], all(Oscar.is_bounded, polys))
+        for poly in polys
+            push!(data["vertices"], Oscar.n_vertices(poly))
+            push!(data["facets"],   Oscar.n_facets(poly))
+            push!(data["rays"],     Oscar.n_rays(poly))
+        end
+    end
+
+    return data
+end
+
 # Spread the per-epoch analysis over the worker pool when there is one.
 _epoch_map(f, epochs, workers) = pmap(f, workers, epochs)
 _epoch_map(f, epochs, ::Nothing) = map(f, epochs)
@@ -188,6 +209,7 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
 
         JLD2.save("$data_path/$epoch/graph.jld2", "graph", G)
         JLD2.save("$data_path/$epoch/edge_data.jld2", "data", edge_data)
+        JLD2.save("$data_path/$epoch/polyhedra_data.jld2", "data", polyhedra_data(regions))
 
         return (monomial_count(f_pre), monomial_count(f_post))
     end
