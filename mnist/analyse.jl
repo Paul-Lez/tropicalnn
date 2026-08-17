@@ -9,7 +9,8 @@ const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
 const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
 # Set the hidden width of the neural network (must match main.jl).
-width = 4
+width = _parse_int(ARGS, ["--width"], "MNIST_WIDTH", 4)
+println("Analysing the MNIST network of hidden width $width")
 
 # Function to extract the parameters required to compute the tropical representation
 function extract_weights_biases_thresholds(model, symbolic=true)
@@ -40,7 +41,7 @@ model = Flux.Chain(
 # 2. Load the state into the model
 println("Loading trained model...")
 # We use JLD2.load to grab the state dictionary we saved earlier, then apply it
-model_state = JLD2.load("outputs/mnist/model.jld2", "model_state")
+model_state = JLD2.load("outputs/mnist/model_$width.jld2", "model_state")
 Flux.loadmodel!(model, model_state)
 
 # 3. Analyze the pre-trained model
@@ -70,7 +71,8 @@ analysis = Dict(
     "trop_rep" => output,
     "num_lin_region" => length(lin_regions),
     "num_mon" => mon_count,
-    "time" => analysis_time
+    "time" => analysis_time,
+    "width" => width
 )
 
 println("Saving analysis...")

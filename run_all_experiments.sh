@@ -49,5 +49,5 @@ run_from_root "random_rational_regions/main.jl" "${EXPERIMENT_ARGS[@]}"
 run_from_root "volume_dynamics/main.jl" "${EXPERIMENT_ARGS[@]}"
 run_from_root "volume_dynamics/analyse.jl"
 
-run_from_root "mnist/main.jl"
+run_from_root "mnist/main.jl" "${EXPERIMENT_ARGS[@]}"
 run_from_root "mnist/analyse.jl" "${EXPERIMENT_ARGS[@]}"

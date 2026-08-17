@@ -1,9 +1,17 @@
+# Included for the `--width` / `MNIST_WIDTH` argument parsing helpers only; this
+# script does not need a worker pool, so `setup_experiment!` is never called.
+include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
+
 using Flux
 using Flux: DataLoader, crossentropy, onecold, onehotbatch, setup, update!
 using MLDatasets
 using JLD2
 using Statistics
 using Printf
+
+# Hidden width of the network. Keep `main.jl` and `analyse.jl` in sync by passing
+# the same `--width` (or `MNIST_WIDTH`) to both.
+const WIDTH = _parse_int(ARGS, ["--width"], "MNIST_WIDTH", 4)
 
 # ==========================================
 # 1. Load and Prepare Data
@@ -44,7 +52,7 @@ accuracy(model, x, y) = mean(onecold(model(x)) .== onecold(y))
 # 3. Main Training Routine
 # ==========================================
 function train_and_save()
-    width = 4
+    width = WIDTH
     epochs = 30
     batch_size = 128
     learning_rate = 0.005
@@ -95,12 +103,13 @@ function train_and_save()
     output_dir = "outputs/mnist"
     mkpath(output_dir)
 
-    # Save only the model state (weights/biases)
+    # Save only the model state (weights/biases), keyed by width so that models
+    # of different widths do not overwrite each other.
     model_state = Flux.state(model)
-    jldsave(joinpath(output_dir, "model.jld2"); model_state)
+    jldsave(joinpath(output_dir, "model_$width.jld2"); model_state)
 
     # Save the evaluation metrics
-    open(joinpath(output_dir, "metrics.txt"), "w") do io
+    open(joinpath(output_dir, "metrics_$width.txt"), "w") do io
         write(io, "Model Type: MLP (Architecture: [$(28^2), $width, 10])\n")
         write(io, "Train Accuracy: $(round(train_acc * 100, digits=2))%\n")
         write(io, "Test Accuracy: $(round(test_acc * 100, digits=2))%\n")
