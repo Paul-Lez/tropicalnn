@@ -25,7 +25,7 @@ run_from_root() {
     local script="$1"
     shift
     echo "==> $script"
-    (cd "$ROOT" && "$JULIA" +1.12.5 --project="$ROOT" "$script" "$@")
+    (cd "$ROOT" && "$JULIA" --project="$ROOT" "$script" "$@")
 }
 
 run_in_dir() {
@@ -33,7 +33,7 @@ run_in_dir() {
     local script="$2"
     shift 2
     echo "==> $dir/$script"
-    (cd "$ROOT/$dir" && "$JULIA" +1.12.5 --project="$ROOT" "$script" "$@")
+    (cd "$ROOT/$dir" && "$JULIA" --project="$ROOT" "$script" "$@")
 }
 
 write_metadata
