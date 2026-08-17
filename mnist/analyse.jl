@@ -51,13 +51,17 @@ start_time = time()
 weights, biases, thresholds = extract_weights_biases_thresholds(model, false)
 
 println("Computing tropical representation...")
-output = TropicalNN.tropicalize(weights, biases, thresholds, quicksum=true,
-    prune=true, dedup=true, elim_mode=REGION_MODE, workers=WORKER_IDS)
-println("Got tropical representation!")
+tropicalize_time = @elapsed output = TropicalNN.tropicalize(weights, biases, thresholds,
+    quicksum=true, prune=true, dedup=true, elim_mode=REGION_MODE, workers=WORKER_IDS)
+println("Got tropical representation! ($tropicalize_time seconds)")
 
 println("Enumerating linear regions...")
-lin_regions = TropicalNN.linear_regions(output[1]; mode=REGION_MODE, workers=WORKER_IDS)
-println("Number of linear regions is: ", length(lin_regions))
+# Pass the whole output vector so we get the linear regions of the full network
+# (the common refinement over all 10 output coordinates), not just of output 1.
+regions_time = @elapsed lin_regions = TropicalNN.linear_regions(output;
+    mode=REGION_MODE, workers=WORKER_IDS)
+println("Number of linear regions is: ", length(lin_regions),
+    " ($regions_time seconds)")
 
 println("Counting monomials...")
 mon_count = TropicalNN.monomial_count(output)
@@ -72,6 +76,8 @@ analysis = Dict(
     "num_lin_region" => length(lin_regions),
     "num_mon" => mon_count,
     "time" => analysis_time,
+    "tropicalize_time" => tropicalize_time,
+    "linear_regions_time" => regions_time,
     "width" => width
 )
 
