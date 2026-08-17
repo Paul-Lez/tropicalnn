@@ -171,11 +171,13 @@ function analyze_epochs(data_path; mode=REGION_MODE, workers=nothing)
         f_pre  = tropicalize(weights,biases,t)[1]
         f_post = TropicalNN.prune(f_pre; mode=mode, workers=workers)
 
-        G = TropicalNN.get_graph(f_post; mode=mode)
+        # Compute the subdivision once, then read every statistic off it.
+        regions = TropicalNN.map_statistic(identity, f_post; mode=mode)
+        G = TropicalNN.get_graph(regions)
 
         edge_data = Dict(
-            "gradients" => edge_directions(f_post; mode=mode)["full"],
-            "lengths"   => edge_lengths(f_post; mode=mode)["full"]
+            "gradients" => TropicalNN._edge_directions(G)["full"],
+            "lengths"   => TropicalNN._edge_lengths(G)["full"]
         )
 
         JLD2.save("$data_path/$epoch/graph.jld2", "graph", G)
