@@ -8,7 +8,7 @@ using Graphs
 using TropicalNN
 using Logging
 
-const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
+const REGION_MODE = TropicalNN.OscarMode()
 const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
 global_logger(SimpleLogger(stderr, Logging.Error))
