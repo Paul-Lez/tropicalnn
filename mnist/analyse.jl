@@ -1,84 +1,129 @@
 include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
 const EXPERIMENT_RUNTIME = setup_experiment!()
 
-using TropicalNN
+using CSV
+using DataFrames
 import Flux
 using JLD2
+using TropicalNN
+
+include(joinpath(@__DIR__, "models.jl"))
+using .MNISTModels
 
 const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
 const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
+const OUTPUT_DIR = joinpath("outputs", "mnist")
+const RESULTS_PATH = joinpath(OUTPUT_DIR, "linear_regions.csv")
 
-# Set the hidden width of the neural network (must match main.jl).
-width = 4
-
-# Function to extract the parameters required to compute the tropical representation
-function extract_weights_biases_thresholds(model, symbolic=true)
-    # Skip the final softmax layer because it has no learnable parameters and
-    # is not piecewise linear.
-    num_dense_layers = length(model) - 1 
-    
-    if symbolic
-        weights = [Rational{BigInt}.(model[i].weight) for i in 1:num_dense_layers]
-        biases = [Rational{BigInt}.(model[i].bias) for i in 1:num_dense_layers]
-        thresholds = [Rational{BigInt}.(zeros(length(model[i].bias))) for i in 1:(num_dense_layers-1)]
-    else
-        weights = [Float64.(model[i].weight) for i in 1:num_dense_layers]
-        biases = [Float64.(model[i].bias) for i in 1:num_dense_layers]
-        thresholds = [zeros(Float64, length(model[i].bias)) for i in 1:(num_dense_layers-1)]
-    end
-    
-    return weights, biases, thresholds
+function empty_results()
+    return DataFrame(
+        Model = String[],
+        Activation = String[],
+        Architecture = String[],
+        HiddenLayers = Int[],
+        Width = Int[],
+        Pieces = Union{Missing, Int}[],
+        NumRegions = Int[],
+        TimeSeconds = Float64[],
+        Algorithm = String[],
+        Encoding = String[],
+    )
 end
 
-# 1. Define the exact same architecture that was trained
-model = Flux.Chain(
-    Flux.Dense(28^2 => width, Flux.relu),
-    Flux.Dense(width => 10),
-    Flux.softmax,
-)
+function load_results()
+    isfile(RESULTS_PATH) || return empty_results()
+    results = load_typed_csv(RESULTS_PATH, empty_results())
+    all(results.Algorithm .== "HiGHS") || throw(ArgumentError(
+        "$RESULTS_PATH contains results from an algorithm other than HiGHS"
+    ))
+    all(results.Encoding .== "Float64") || throw(ArgumentError(
+        "$RESULTS_PATH contains results with an encoding other than Float64"
+    ))
+    return results
+end
 
-# 2. Load the state into the model
-println("Loading trained model...")
-# We use JLD2.load to grab the state dictionary we saved earlier, then apply it
-model_state = JLD2.load("outputs/mnist/model.jld2", "model_state")
-Flux.loadmodel!(model, model_state)
+function write_results(results)
+    temporary_path = RESULTS_PATH * ".tmp"
+    CSV.write(temporary_path, results)
+    mv(temporary_path, RESULTS_PATH; force = true)
+end
 
-# 3. Analyze the pre-trained model
-println("Extracting weights and biases...")
-start_time = time()
+function save_analysis(path; kwargs...)
+    temporary_path = path * ".tmp"
+    jldsave(temporary_path; kwargs...)
+    mv(temporary_path, path; force = true)
+end
 
-weights, biases, thresholds = extract_weights_biases_thresholds(model, false)
+function run_analysis()
+    results = load_results()
+    analysis_dir = joinpath(OUTPUT_DIR, "analysis")
+    mkpath(analysis_dir)
 
-println("Computing tropical representation...")
-output = TropicalNN.tropicalize(weights, biases, thresholds, quicksum=true,
-    prune=true, dedup=true, elim_mode=REGION_MODE, workers=WORKER_IDS)
-println("Got tropical representation!")
+    for spec in experiment_specs()
+        architecture = join(vcat(28^2, spec.widths, 10), ":")
+        path = model_path(OUTPUT_DIR, spec)
+        isfile(path) || throw(ArgumentError("missing trained model: $path; run mnist/main.jl first"))
+        analysis_path = joinpath(analysis_dir, "$(spec.id).jld2")
 
-println("Enumerating linear regions...")
-lin_regions = TropicalNN.linear_regions(output[1]; mode=REGION_MODE, workers=WORKER_IDS)
-println("Number of linear regions is: ", length(lin_regions))
+        matching_rows = findall(==(spec.id), results.Model)
+        length(matching_rows) <= 1 || throw(ArgumentError(
+            "$RESULTS_PATH contains duplicate rows for $(spec.id)"
+        ))
+        if !isempty(matching_rows)
+            row_index = only(matching_rows)
+            row = results[row_index, :]
+            expected_pieces = spec.activation == :maxout ? spec.pieces : missing
+            row_matches_spec = row.Activation == string(spec.activation) &&
+                row.Architecture == architecture &&
+                row.HiddenLayers == length(spec.widths) &&
+                row.Width == first(spec.widths) &&
+                isequal(row.Pieces, expected_pieces)
+            row_matches_spec || throw(ArgumentError(
+                "$RESULTS_PATH contains incompatible metadata for $(spec.id)"
+            ))
+            if isfile(analysis_path) && mtime(analysis_path) >= mtime(path)
+                println("Skipping completed $(spec.id) ($architecture)")
+                continue
+            end
+            deleteat!(results, row_index)
+        end
 
-println("Counting monomials...")
-mon_count = TropicalNN.monomial_count(output)
-println("Monomial count is: $mon_count")
+        println("Analysing $(spec.id) ($architecture)...")
+        model = build_model(spec)
+        model_state = JLD2.load(path, "model_state")
+        Flux.loadmodel!(model, model_state)
+        tropical_network = model_to_tropical(model, spec)
 
-analysis_time = time() - start_time
-println("Total analysis time: $analysis_time seconds")
+        elapsed = @elapsed regions = linear_regions(
+            tropical_network;
+            mode = REGION_MODE,
+            workers = WORKER_IDS,
+        )
+        num_regions = length(regions)
+        pieces = spec.activation == :maxout ? spec.pieces : missing
+        push!(results, (
+            spec.id,
+            string(spec.activation),
+            architecture,
+            length(spec.widths),
+            first(spec.widths),
+            pieces,
+            num_regions,
+            elapsed,
+            "HiGHS",
+            "Float64",
+        ))
+        save_analysis(
+            analysis_path;
+            num_regions,
+            elapsed,
+            architecture,
+            algorithm = "HiGHS",
+            encoding = "Float64",
+        )
+        write_results(results)
+        println("  $num_regions regions in $(round(elapsed; digits = 2)) seconds")
+    end
+end
 
-# 4. Save the analysis correctly
-analysis = Dict(
-    "trop_rep" => output,
-    "num_lin_region" => length(lin_regions),
-    "num_mon" => mon_count,
-    "time" => analysis_time
-)
-
-println("Saving analysis...")
-# Make sure the directory exists before attempting to save
-output_dir = "outputs/mnist"
-mkpath(output_dir)
-
-# Using jldsave to explicitly save the dictionary object into the file
-jldsave(joinpath(output_dir, "analysis_$width.jld2"); analysis)
-
-println("Done!")
+run_analysis()

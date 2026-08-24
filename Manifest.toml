@@ -2216,7 +2216,7 @@ uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.11.3"
 
 [[deps.TropicalNN]]
-deps = ["CDDLib", "Combinatorics", "Distributed", "GLPK", "Graphs", "HiGHS", "JuMP", "LinearAlgebra", "MetaGraphsNext", "Oscar", "Polyhedra", "Random"]
+deps = ["CDDLib", "Combinatorics", "Distributed", "GLPK", "Graphs", "HiGHS", "JuMP", "LinearAlgebra", "MetaGraphsNext", "Oscar", "Polyhedra", "Random", "TropicalNumbers"]
 path = "../TropicalNN.jl"
 uuid = "45302f6a-f5d4-4eaf-9bda-c9ca7b62f2bc"
 version = "0.1.2"
@@ -2226,6 +2226,11 @@ deps = ["CSV", "DataFrames", "Distributed", "Flux", "Graphs", "JLD2", "Logging",
 path = "."
 uuid = "b814d752-44fc-4260-8e87-3f7821012607"
 version = "0.0.0"
+
+[[deps.TropicalNumbers]]
+git-tree-sha1 = "1ca077a67004d8be73339fa726e42f6d3e54dfab"
+uuid = "b3a74e9c-7526-4576-a4eb-79c0d4c32334"
+version = "0.6.4"
 
 [[deps.URIs]]
 git-tree-sha1 = "bef26fb046d031353ef97a82e3fdb6afe7f21b1a"

@@ -107,3 +107,13 @@ end
 function highs_mode(runtime::ExperimentRuntime; kwargs...)
     return TropicalNN.HiGHSMode(; threads = runtime.highs_threads, kwargs...)
 end
+
+function load_typed_csv(path, schema)
+    raw_data = CSV.read(path, DataFrames.DataFrame)
+    propertynames(raw_data) == propertynames(schema) || throw(ArgumentError(
+        "$path has an incompatible schema; move or remove it before rerunning"
+    ))
+    data = copy(schema)
+    append!(data, raw_data; cols = :setequal, promote = false)
+    return data
+end

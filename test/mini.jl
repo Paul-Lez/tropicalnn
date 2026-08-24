@@ -17,6 +17,8 @@ const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
 const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
 include("../utils.jl")
+include("../mnist/models.jl")
+using .MNISTModels
 
 const SMOKE_ROOT = joinpath(@__DIR__, "..", "outputs", "smoke")
 
@@ -98,20 +100,38 @@ function smoke_width_depth()
     output_dir = joinpath(SMOKE_ROOT, "width_depth")
     mkpath(output_dir)
 
-    # One-layer sweep, mirroring width_depth/main.jl's sweep_onelayer.
-    w1, b1, t1 = random_mlp([2, 2, 1])
-    onelayer = tropicalize(w1, b1, t1)[1]
-    results = DataFrame(Width=[2], Pre_Avg=[Float64(monomial_count(onelayer))])
-    CSV.write(joinpath(output_dir, "sweep_onelayer.csv"), results)
+    weights, biases, _ = random_mlp([2, 2, 1]; symbolic = false)
+    relu_network = NeuralNetwork(
+        AffineLayer(weights[1], biases[1]),
+        ActivationLayer(relu(Float64), 2),
+        AffineLayer(weights[2], biases[2]),
+    )
+    maxout_network = random_maxout_network([2, 2, 1], 2, Float64)
+    @assert relu_network isa NeuralNetwork{Float64}
+    @assert maxout_network isa NeuralNetwork{Float64}
 
-    # Two-layer net, mirroring the sweep_twolayer path ([2, 2, w, 1]). This
-    # exercises the deeper tropicalize composition that the single-layer case skips.
-    w2, b2, t2 = random_mlp([2, 2, 2, 1])
-    twolayer = tropicalize(w2, b2, t2)[1]
-    results2 = DataFrame(Width=[2], Pre_Avg=[Float64(monomial_count(twolayer))])
-    CSV.write(joinpath(output_dir, "sweep_twolayer.csv"), results2)
+    relu_regions = linear_regions(relu_network; mode = REGION_MODE, workers = WORKER_IDS)
+    maxout_regions = linear_regions(maxout_network; mode = REGION_MODE, workers = WORKER_IDS)
+    results = DataFrame(
+        Network = ["relu", "maxout"],
+        NumRegions = length.((relu_regions, maxout_regions)),
+        Algorithm = fill("HiGHS", 2),
+        Encoding = fill("Float64", 2),
+    )
+    CSV.write(joinpath(output_dir, "linear_regions.csv"), results)
 
-    return " ($(results.Pre_Avg[1]) / $(results2.Pre_Avg[1]) monomials)"
+    # CSV infers a Missing-only column from a ReLU-only partial checkpoint.
+    # Loading through the declared schema must preserve room for later maxout rows.
+    partial_path = joinpath(output_dir, "partial_checkpoint.csv")
+    CSV.write(partial_path, DataFrame(Network = ["relu"], Pieces = [missing]))
+    partial_schema = DataFrame(
+        Network = String[],
+        Pieces = Union{Missing, Int}[],
+    )
+    resumed = load_typed_csv(partial_path, partial_schema)
+    @assert eltype(resumed.Pieces) == Union{Missing, Int}
+    push!(resumed, ("maxout", 2))
+    return " (relu=$(length(relu_regions)), maxout=$(length(maxout_regions)) regions)"
 end
 
 function smoke_get_monomial_counts(model)
@@ -292,41 +312,79 @@ function smoke_mnist_main()
     mkpath(output_dir)
 
     X_train = Float32[0.0 1.0 0.0 1.0; 0.0 0.0 1.0 1.0]
-    y_train = Float32[0.0 1.0 1.0 0.0]
+    y_train = Flux.onehotbatch([0, 1, 1, 0], 0:1)
     loader = DataLoader((X_train, y_train), batchsize=2, shuffle=false)
+    requested_specs = experiment_specs()
+    observed_specs = [
+        (spec.activation, spec.widths, spec.pieces)
+        for spec in requested_specs
+    ]
+    expected_specs = vcat(
+        [(:relu, [width], 1) for width in 4:8],
+        [(:maxout, [width], 2) for width in 4:8],
+        [(:relu, [width, width], 1) for width in 4:8],
+    )
+    @assert observed_specs == expected_specs "MNIST experiment architecture matrix changed"
 
-    model = Flux.Chain(Flux.Dense(2 => 2, Flux.relu), Flux.Dense(2 => 1), Flux.sigmoid)
-    opt_state = Flux.setup(Flux.Adam(0.005), model)
-    for (x, y) in loader
-        _, grads = Flux.withgradient(model) do m
-            mean(Flux.binarycrossentropy(m(x), y))
+    smoke_specs = (
+        ExperimentSpec("smoke_relu", :relu, [2]),
+        ExperimentSpec("smoke_maxout", :maxout, [2]; pieces = 2),
+        ExperimentSpec("smoke_relu_depth2", :relu, [2, 2]),
+    )
+    accuracies = Float64[]
+
+    for spec in smoke_specs
+        model = build_model(spec; input_dimension = 2, output_dimension = 2)
+        opt_state = Flux.setup(Flux.Adam(0.005), model)
+        for (x, y) in loader
+            _, grads = Flux.withgradient(model) do m
+                Flux.crossentropy(m(x), y)
+            end
+            Flux.update!(opt_state, model, grads[1])
         end
-        Flux.update!(opt_state, model, grads[1])
-    end
 
-    acc = mean((model(X_train) .> 0.5f0) .== (y_train .> 0.5f0))
-    model_state = Flux.state(model)
-    jldsave(joinpath(output_dir, "model.jld2"); model_state)
-    open(joinpath(output_dir, "metrics.txt"), "w") do io
-        @printf(io, "Smoke Accuracy: %.2f%%\n", acc * 100)
+        push!(accuracies, mean(Flux.onecold(model(X_train)) .== Flux.onecold(y_train)))
+        model_state = Flux.state(model)
+        jldsave(joinpath(output_dir, "$(spec.id).jld2"); model_state)
     end
-    return " (acc=$(round(acc, digits=3)))"
+    return " (relu/maxout accuracies=$(round.(accuracies; digits = 3)))"
 end
 
 function smoke_mnist_analyse()
     output_dir = joinpath(SMOKE_ROOT, "mnist")
-    model = Flux.Chain(Flux.Dense(2 => 2, Flux.relu), Flux.Dense(2 => 1), Flux.sigmoid)
-    model_state = JLD2.load(joinpath(output_dir, "model.jld2"), "model_state")
-    Flux.loadmodel!(model, model_state)
+    smoke_specs = (
+        ExperimentSpec("smoke_relu", :relu, [2]),
+        ExperimentSpec("smoke_maxout", :maxout, [2]; pieces = 2),
+        ExperimentSpec("smoke_relu_depth2", :relu, [2, 2]),
+    )
+    region_counts = Int[]
+    for spec in smoke_specs
+        model = build_model(spec; input_dimension = 2, output_dimension = 2)
+        model_state = JLD2.load(joinpath(output_dir, "$(spec.id).jld2"), "model_state")
+        Flux.loadmodel!(model, model_state)
 
-    weights, biases, thresholds = model_weights_biases_thresholds(model)
-    output = tropicalize(weights, biases, thresholds, quicksum=true)
-    lin_regions = linear_regions(output[1]; mode=REGION_MODE, workers=WORKER_IDS)
-    mon_count = monomial_count(output)
-
-    analysis = Dict("trop_rep"=>output, "num_lin_region"=>length(lin_regions), "num_mon"=>mon_count)
+        network = model_to_tropical(model, spec)
+        @assert network isa NeuralNetwork{Float64}
+        if spec.activation == :maxout
+            point = Float32[0.25, -0.75]
+            hidden_output = model[1](point)
+            flux_logits = model[2](hidden_output)
+            tropical_output = tropicalize(network; quicksum = true, dedup = true)
+            tropical_logits = TropicalNN.TropicalNumbers.content.(
+                TropicalNN.evaluate(tropical_output, Float64.(point))
+            )
+            @assert isapprox(tropical_logits, Float64.(flux_logits); atol = 1e-6)
+        end
+        regions = linear_regions(network; mode = REGION_MODE, workers = WORKER_IDS)
+        push!(region_counts, length(regions))
+    end
+    analysis = Dict(
+        "num_lin_regions" => region_counts,
+        "algorithm" => "HiGHS",
+        "encoding" => "Float64",
+    )
     jldsave(joinpath(output_dir, "analysis_smoke.jld2"); analysis)
-    return " ($(length(lin_regions)) regions, $mon_count monomials)"
+    return " (relu/maxout regions=$region_counts, Float64/HiGHS)"
 end
 
 # Exercise the distributed worker path used by the real experiments. If the
@@ -365,7 +423,7 @@ function main()
     mkpath(SMOKE_ROOT)
     run_step("visualize_linear_regions/main.jl", smoke_visualize_linear_regions)
     run_step("effective_radius/main.jl", smoke_effective_radius)
-    run_step("width_depth/main.jl", smoke_width_depth)
+    run_step("width_depth/linear_regions.jl", smoke_width_depth)
     run_step("rate_of_pruning/main.jl", smoke_rate_of_pruning)
     run_step("volume_dynamics/main.jl", smoke_volume_dynamics_main)
     run_step("volume_dynamics/analyse.jl", smoke_volume_dynamics_analyse)

@@ -43,6 +43,7 @@ run_in_dir "effective_radius" "main.jl" "${EXPERIMENT_ARGS[@]}"
 run_in_dir "effective_radius" "hoffman_tables.jl" "${EXPERIMENT_ARGS[@]}"
 
 run_from_root "width_depth/main.jl" "${EXPERIMENT_ARGS[@]}"
+run_from_root "width_depth/linear_regions.jl" "${EXPERIMENT_ARGS[@]}"
 run_from_root "rate_of_pruning/main.jl" "${EXPERIMENT_ARGS[@]}"
 run_from_root "random_rational_regions/main.jl" "${EXPERIMENT_ARGS[@]}"
 

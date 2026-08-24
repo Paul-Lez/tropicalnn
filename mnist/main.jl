@@ -1,113 +1,166 @@
+using CSV
+using DataFrames
 using Flux
-using Flux: DataLoader, crossentropy, onecold, onehotbatch, setup, update!
-using MLDatasets
+using Flux: DataLoader, crossentropy, onecold, onehotbatch
 using JLD2
-using Statistics
+using MLDatasets
 using Printf
+using Random
+using Statistics
 
-# ==========================================
-# 1. Load and Prepare Data
-# ==========================================
+include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
+include(joinpath(@__DIR__, "models.jl"))
+using .MNISTModels
+
+const OUTPUT_DIR = joinpath("outputs", "mnist")
+const METRICS_PATH = joinpath(OUTPUT_DIR, "metrics.csv")
+
 function get_data(batch_size)
-    # Pre-v0.7 MLDatasets syntax calls the module's functions directly
-    X_train, y_train = MLDatasets.MNIST.traindata(Float32)
-    X_test, y_test = MLDatasets.MNIST.testdata(Float32)
+    x_train, y_train = MLDatasets.MNIST.traindata(Float32)
+    x_test, y_test = MLDatasets.MNIST.testdata(Float32)
 
-    # Reshape features to (features, N) and one-hot encode the digit labels.
-    X_train = reshape(Float32.(X_train), 28^2, :)
+    x_train = reshape(Float32.(x_train), 28^2, :)
     y_train = onehotbatch(y_train, 0:9)
-    X_test = reshape(Float32.(X_test), 28^2, :)
+    x_test = reshape(Float32.(x_test), 28^2, :)
     y_test = onehotbatch(y_test, 0:9)
 
-    # Create DataLoaders to yield minibatches
-    train_loader = DataLoader((X_train, y_train), batchsize=batch_size, shuffle=true)
-    test_loader = DataLoader((X_test, y_test), batchsize=batch_size, shuffle=false)
-
-    return train_loader, test_loader, (X_train, y_train), (X_test, y_test)
+    train_loader = DataLoader((x_train, y_train); batchsize = batch_size, shuffle = true)
+    return train_loader, (x_train, y_train), (x_test, y_test)
 end
 
-# ==========================================
-# 2. Define the Model
-# ==========================================
-function build_model(width)
-    Chain(
-        Dense(28^2 => width, relu),
-        Dense(width => 10),
-        softmax
-    )
-end
+accuracy(model, data) = mean(onecold(model(data[1])) .== onecold(data[2]))
 
-# Helper function to calculate 10-class accuracy.
-accuracy(model, x, y) = mean(onecold(model(x)) .== onecold(y))
-
-# ==========================================
-# 3. Main Training Routine
-# ==========================================
-function train_and_save()
-    width = 4
-    epochs = 30
-    batch_size = 128
-    learning_rate = 0.005
-
-    println("Loading data...")
-    train_loader, test_loader, train_full, test_full = get_data(batch_size)
-
-    println("Building MLP model with architecture [$(28^2), $width, 10]...")
-    model = build_model(width)
-
-    # Setup the Adam optimizer
-    opt_state = Flux.setup(Adam(learning_rate), model)
-
-    println("Starting training loop...")
+function train_model!(model, train_loader, epochs, learning_rate)
+    optimizer_state = Flux.setup(Flux.Adam(learning_rate), model)
     for epoch in 1:epochs
         loss_sum = 0.0
         batch_count = 0
-
-        for (x, y) in train_loader
-            # The model returns softmax probabilities, so use cross-entropy.
-            loss_val, grads = Flux.withgradient(model) do m
-                crossentropy(m(x), y)
+        for (input, target) in train_loader
+            loss_value, gradients = Flux.withgradient(model) do current_model
+                crossentropy(current_model(input), target)
             end
-
-            # Update the model parameters
-            Flux.update!(opt_state, model, grads[1])
-
-            loss_sum += loss_val
+            Flux.update!(optimizer_state, model, gradients[1])
+            loss_sum += loss_value
             batch_count += 1
         end
-
-        avg_loss = loss_sum / batch_count
-        @printf("Epoch %d/%d - Average Loss: %.4f\n", epoch, epochs, avg_loss)
+        @printf("  epoch %d/%d, average loss %.4f\n", epoch, epochs, loss_sum / batch_count)
     end
-
-    # Calculate final accuracies
-    println("Calculating final accuracies...")
-    train_acc = accuracy(model, train_full[1], train_full[2])
-    test_acc = accuracy(model, test_full[1], test_full[2])
-
-    @printf("Train Accuracy: %.2f%%\n", train_acc * 100)
-    @printf("Test Accuracy: %.2f%%\n", test_acc * 100)
-
-    # ==========================================
-    # 4. Save the Model and Metrics
-    # ==========================================
-    println("Saving results to outputs/mnist/...")
-    output_dir = "outputs/mnist"
-    mkpath(output_dir)
-
-    # Save only the model state (weights/biases)
-    model_state = Flux.state(model)
-    jldsave(joinpath(output_dir, "model.jld2"); model_state)
-
-    # Save the evaluation metrics
-    open(joinpath(output_dir, "metrics.txt"), "w") do io
-        write(io, "Model Type: MLP (Architecture: [$(28^2), $width, 10])\n")
-        write(io, "Train Accuracy: $(round(train_acc * 100, digits=2))%\n")
-        write(io, "Test Accuracy: $(round(test_acc * 100, digits=2))%\n")
-    end
-
-    println("Done! Model state saved successfully.")
+    return model
 end
 
-# Run the script
-train_and_save()
+function empty_metrics()
+    return DataFrame(
+        Model = String[],
+        Activation = String[],
+        Architecture = String[],
+        HiddenLayers = Int[],
+        Width = Int[],
+        Pieces = Union{Missing, Int}[],
+        Epochs = Int[],
+        BatchSize = Int[],
+        LearningRate = Float64[],
+        Seed = Int[],
+        TrainAccuracy = Float64[],
+        TestAccuracy = Float64[],
+    )
+end
+
+function load_metrics()
+    isfile(METRICS_PATH) || return empty_metrics()
+    return load_typed_csv(METRICS_PATH, empty_metrics())
+end
+
+function write_metrics(metrics)
+    temporary_path = METRICS_PATH * ".tmp"
+    CSV.write(temporary_path, metrics)
+    mv(temporary_path, METRICS_PATH; force = true)
+end
+
+function save_model_state(path, model_state)
+    temporary_path = path * ".tmp"
+    jldsave(temporary_path; model_state)
+    mv(temporary_path, path; force = true)
+end
+
+function run_experiment()
+    epochs = parse(Int, get(ENV, "MNIST_EPOCHS", "5"))
+    batch_size = parse(Int, get(ENV, "MNIST_BATCH_SIZE", "128"))
+    learning_rate = parse(Float64, get(ENV, "MNIST_LEARNING_RATE", "0.005"))
+    epochs > 0 || throw(ArgumentError("MNIST_EPOCHS must be positive"))
+    batch_size > 0 || throw(ArgumentError("MNIST_BATCH_SIZE must be positive"))
+
+    mkpath(joinpath(OUTPUT_DIR, "models"))
+    metrics = load_metrics()
+    pending_specs = Tuple{Int, ExperimentSpec}[]
+
+    for (spec_index, spec) in enumerate(experiment_specs())
+        architecture = join(vcat(28^2, spec.widths, 10), ":")
+        seed = 20260824 + spec_index
+        matching_rows = findall(==(spec.id), metrics.Model)
+        length(matching_rows) <= 1 || throw(ArgumentError(
+            "$METRICS_PATH contains duplicate rows for $(spec.id)"
+        ))
+        if !isempty(matching_rows)
+            row_index = only(matching_rows)
+            row = metrics[row_index, :]
+            expected_pieces = spec.activation == :maxout ? spec.pieces : missing
+            configuration_matches = row.Activation == string(spec.activation) &&
+                row.Architecture == architecture &&
+                row.HiddenLayers == length(spec.widths) &&
+                row.Width == first(spec.widths) &&
+                isequal(row.Pieces, expected_pieces) &&
+                row.Epochs == epochs &&
+                row.BatchSize == batch_size &&
+                row.LearningRate == learning_rate &&
+                row.Seed == seed
+            configuration_matches || throw(ArgumentError(
+                "saved configuration for $(spec.id) does not match this run; " *
+                "move or remove $METRICS_PATH and outputs/mnist/models before rerunning"
+            ))
+            if isfile(model_path(OUTPUT_DIR, spec))
+                println("Skipping completed $(spec.id) ($architecture)")
+                continue
+            end
+            deleteat!(metrics, row_index)
+        end
+        push!(pending_specs, (spec_index, spec))
+    end
+
+    isempty(pending_specs) && return
+    println("Loading MNIST data...")
+    train_loader, train_data, test_data = get_data(batch_size)
+
+    for (spec_index, spec) in pending_specs
+        architecture = join(vcat(28^2, spec.widths, 10), ":")
+        seed = 20260824 + spec_index
+        Random.seed!(seed)
+        println("Training $(spec.id) ($architecture)...")
+        model = build_model(spec)
+        train_model!(model, train_loader, epochs, learning_rate)
+        train_accuracy = accuracy(model, train_data)
+        test_accuracy = accuracy(model, test_data)
+
+        model_state = Flux.state(model)
+        save_model_state(model_path(OUTPUT_DIR, spec), model_state)
+        pieces = spec.activation == :maxout ? spec.pieces : missing
+        push!(metrics, (
+            spec.id,
+            string(spec.activation),
+            architecture,
+            length(spec.widths),
+            first(spec.widths),
+            pieces,
+            epochs,
+            batch_size,
+            learning_rate,
+            seed,
+            train_accuracy,
+            test_accuracy,
+        ))
+        write_metrics(metrics)
+        @printf("  train accuracy %.2f%%, test accuracy %.2f%%\n",
+            100 * train_accuracy, 100 * test_accuracy)
+    end
+end
+
+run_experiment()
