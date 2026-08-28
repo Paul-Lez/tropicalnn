@@ -10,6 +10,7 @@ using JLD2
 using MLDatasets
 using Plots
 using Printf
+import Random
 using Statistics
 using TropicalNN
 
@@ -19,8 +20,11 @@ const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 include("../utils.jl")
 include("../mnist/models.jl")
 using .MNISTModels
+include("../volume_dynamics/experiment.jl")
+import .VolumeDynamicsExperiment
 
 const SMOKE_ROOT = joinpath(@__DIR__, "..", "outputs", "smoke")
+const VOLUME_SMOKE_PATH = Ref{String}()
 
 function run_step(name, f)
     print("smoke: $name ... ")
@@ -175,136 +179,56 @@ function smoke_rate_of_pruning()
     return " ($(nrow(results)) row)"
 end
 
-function smoke_accuracy(model, X, Y)
-    X_mat = Matrix(X')
-    preds = model(X_mat) .>= 0.5
-    return sum(preds .== reshape(Y, 1, :)) / length(Y)
-end
-
-function smoke_save_weights(model, path)
-    weights = [Rational{BigInt}.(model[i].weight) for i in 1:length(model)-1]
-    biases = [Rational{BigInt}.(model[i].bias) for i in 1:length(model)-1]
-    mkpath(path)
-    JLD2.save(joinpath(path, "weights.jld2"), "data", weights)
-    JLD2.save(joinpath(path, "biases.jld2"), "data", biases)
-end
-
-function smoke_train_volume_model(data_path, X_train, X_test, Y_train, Y_test)
-    weights, biases, _ = random_mlp([2, 1, 1])
-    model = Flux.Chain(
-        Flux.Dense(weights[1], biases[1], Flux.relu),
-        Flux.Dense(weights[2], biases[2], identity),
-        Flux.σ,
-    )
-
-    X_train_mat = Matrix(X_train')
-    Y_train_mat = reshape(Y_train, 1, :)
-    loader = DataLoader((X_train_mat, Y_train_mat), batchsize=2, shuffle=false)
-    loss(m, x, y) = Flux.binarycrossentropy(m(x), y)
-    opt_state = Flux.setup(Flux.Adam(1e-3), model)
-
-    training_data = Dict("loss"=>Float64[], "train_acc"=>Float64[], "test_acc"=>Float64[])
-    for epoch in 0:1
-        epoch_loss = 0.0
-        count = 0
-        for (x_batch, y_batch) in loader
-            l, gs = Flux.withgradient(m -> loss(m, x_batch, y_batch), model)
-            batch_n = size(y_batch, 2)
-            epoch_loss += l * batch_n
-            Flux.update!(opt_state, model, gs[1])
-            count += batch_n
-        end
-        push!(training_data["loss"], epoch_loss / count)
-        push!(training_data["train_acc"], smoke_accuracy(model, X_train, Y_train))
-        push!(training_data["test_acc"], smoke_accuracy(model, X_test, Y_test))
-        smoke_save_weights(model, joinpath(data_path, string(epoch)))
-    end
-    return training_data
-end
-
-function smoke_analyze_volume_epochs(data_path)
-    epochs = sort(parse.(Int, filter(x -> !occursin(".", x), readdir(data_path))))
-    monomial_data = Dict("pre"=>Int[], "post"=>Int[])
-
-    for epoch in epochs
-        weights = JLD2.load(joinpath(data_path, string(epoch), "weights.jld2"))["data"]
-        biases = JLD2.load(joinpath(data_path, string(epoch), "biases.jld2"))["data"]
-        thresholds = [Rational{BigInt}.(zeros(length(bias))) for bias in biases[1:end-1]]
-
-        f_pre = tropicalize(weights, biases, thresholds)[1]
-        f_post = TropicalNN.prune(f_pre; mode=REGION_MODE, workers=WORKER_IDS)
-        graph = TropicalNN.get_graph(f_post; mode=REGION_MODE)
-        edge_data = Dict(
-            "gradients"=>edge_directions(f_post; mode=REGION_MODE)["full"],
-            "lengths"=>edge_lengths(f_post; mode=REGION_MODE)["full"],
-        )
-
-        JLD2.save(joinpath(data_path, string(epoch), "graph.jld2"), "graph", graph)
-        JLD2.save(joinpath(data_path, string(epoch), "edge_data.jld2"), "data", edge_data)
-        push!(monomial_data["pre"], monomial_count(f_pre))
-        push!(monomial_data["post"], monomial_count(f_post))
-    end
-
-    JLD2.save(joinpath(data_path, "monomial_data.jld2"), "data", monomial_data)
-    return monomial_data
-end
-
 function smoke_volume_dynamics_main()
-    data_path = joinpath(SMOKE_ROOT, "volume_dynamics")
-    mkpath(data_path)
-
-    X_train, X_test, Y_train, Y_test = tiny_binary_data()
-    JLD2.save(joinpath(data_path, "X_train.jld2"), "data", X_train)
-    JLD2.save(joinpath(data_path, "X_test.jld2"), "data", X_test)
-    JLD2.save(joinpath(data_path, "Y_train.jld2"), "data", Y_train)
-    JLD2.save(joinpath(data_path, "Y_test.jld2"), "data", Y_test)
-
-    training_data = smoke_train_volume_model(data_path, X_train, X_test, Y_train, Y_test)
-    JLD2.save(joinpath(data_path, "training_data.jld2"), "data", training_data)
-    monomial_data = smoke_analyze_volume_epochs(data_path)
-    return " ($(length(monomial_data["pre"])) epochs)"
+    data_path = mktempdir(SMOKE_ROOT; prefix = "volume_dynamics_")
+    VOLUME_SMOKE_PATH[] = data_path
+    dataset = VolumeDynamicsExperiment.generate_dataset(
+        VolumeDynamicsExperiment.SpiralGenerator(noise = 0.01, turns = 0.5),
+        Random.MersenneTwister(101);
+        train_size = 20,
+        validation_size = 8,
+        test_size = 8,
+    )
+    VolumeDynamicsExperiment.save_dataset(joinpath(data_path, "dataset.jld2"), dataset)
+    model = VolumeDynamicsExperiment.build_model(Random.MersenneTwister(102), 2)
+    @assert eltype(model[1].weight) == Float64
+    training_data, _ = VolumeDynamicsExperiment.train_model!(
+        model,
+        dataset,
+        data_path;
+        batch_size = 4,
+        learning_rate = 1e-3,
+        weight_decay = 1e-4,
+        max_steps = 1,
+        checkpoint_every = 1,
+        rng = Random.MersenneTwister(103),
+    )
+    @assert training_data["step"] == [0, 1]
+    parameters = JLD2.load(joinpath(
+        data_path, "checkpoints", "00000000", "parameters.jld2"
+    ))
+    @assert eltype(parameters["weights"][1]) == Rational{BigInt}
+    monomial_data = VolumeDynamicsExperiment.analyze_checkpoints(
+        data_path;
+        mode = REGION_MODE,
+        workers = WORKER_IDS,
+    )
+    return " ($(length(monomial_data["step"])) checkpoints)"
 end
 
 function smoke_volume_dynamics_analyse()
-    data_path = joinpath(SMOKE_ROOT, "volume_dynamics")
-    training_data = JLD2.load(joinpath(data_path, "training_data.jld2"))["data"]
-
-    df_acc = DataFrame(
-        Epoch = 0:(length(training_data["train_acc"]) - 1),
-        Train_Accuracy = training_data["train_acc"],
-        Test_Accuracy = training_data["test_acc"],
-        Loss = training_data["loss"],
-    )
-    CSV.write(joinpath(data_path, "accuracies.csv"), df_acc)
-
-    monomial_data = JLD2.load(joinpath(data_path, "monomial_data.jld2"))["data"]
-    epochs = sort(parse.(Int, filter(x -> !occursin(".", x), readdir(data_path))))
-    df_mono = DataFrame(Epoch = epochs, Pre_Pruning = monomial_data["pre"], Post_Pruning = monomial_data["post"])
-    CSV.write(joinpath(data_path, "monomial_counts.csv"), df_mono)
-
-    mean_vols = Float64[]
-    median_vols = Float64[]
-    count_vols = Int[]
-    for epoch in epochs
-        graph = JLD2.load(joinpath(data_path, string(epoch), "graph.jld2"))["graph"]
-        finite_vols = Float64[]
-        for vertex in Graphs.vertices(graph)
-            region_volume = sum(Float64.(graph[vertex]["volume"]))
-            isfinite(region_volume) && push!(finite_vols, region_volume)
-        end
-        push!(mean_vols, isempty(finite_vols) ? NaN : mean(finite_vols))
-        push!(median_vols, isempty(finite_vols) ? NaN : median(finite_vols))
-        push!(count_vols, length(finite_vols))
-    end
-
-    df_vols = DataFrame(
-        Epoch = epochs,
-        Mean_Finite_Volume = mean_vols,
-        Median_Finite_Volume = median_vols,
-        Finite_Volume_Count = count_vols,
-    )
-    CSV.write(joinpath(data_path, "finite_volumes_stats.csv"), df_vols)
-    return " ($(nrow(df_acc)) accuracy rows)"
+    data_path = VOLUME_SMOKE_PATH[]
+    training_data = JLD2.load(joinpath(data_path, "training_data.jld2"))["training_data"]
+    final_metrics = JLD2.load(joinpath(data_path, "final_metrics.jld2"))["final_metrics"]
+    graph = JLD2.load(joinpath(
+        data_path, "checkpoints", "00000000", "graph.jld2"
+    ))["graph"]
+    @assert training_data["step"] == [0, 1]
+    @assert final_metrics["step"] == 1
+    @assert all(isfinite, [
+        sum(Float64.(graph[vertex]["volume"])) for vertex in Graphs.vertices(graph)
+    ])
+    return " ($(length(training_data["step"])) metric rows)"
 end
 
 function smoke_mnist_main()

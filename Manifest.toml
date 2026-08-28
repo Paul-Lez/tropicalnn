@@ -2,7 +2,7 @@
 
 julia_version = "1.12.5"
 manifest_format = "2.0"
-project_hash = "3958c19b85e38cbe370d3f4ca1b9edbf93b1435e"
+project_hash = "bbe555419c67c6f60aa004303eab83fcd9b2c409"
 
 [[deps.ADTypes]]
 git-tree-sha1 = "d9aaef7c63466eee4de23b4d9dad03629df54bea"
@@ -2222,7 +2222,7 @@ uuid = "45302f6a-f5d4-4eaf-9bda-c9ca7b62f2bc"
 version = "0.1.2"
 
 [[deps.TropicalNNExperiments]]
-deps = ["CSV", "DataFrames", "Distributed", "Flux", "Graphs", "JLD2", "Logging", "MLDatasets", "Oscar", "Plots", "Printf", "Statistics", "TropicalNN"]
+deps = ["CSV", "DataFrames", "Distributed", "Flux", "Graphs", "JLD2", "Logging", "MLDatasets", "MLUtils", "Oscar", "Plots", "Printf", "Statistics", "TropicalNN"]
 path = "."
 uuid = "b814d752-44fc-4260-8e87-3f7821012607"
 version = "0.0.0"
