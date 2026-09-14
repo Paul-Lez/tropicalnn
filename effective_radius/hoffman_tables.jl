@@ -15,13 +15,16 @@ include(joinpath(@__DIR__, "hoffman_summary.jl"))
     using Statistics
     using TropicalNN
 
+    const LOWER_SAMPLE_POLICY =
+        "ceil_one_tenth_brute_force_candidates_per_cell_matrix"
+
     function timed_value(f)
         value = nothing
         seconds = @elapsed value = f()
-        return Float64(value), seconds
+        return value, seconds
     end
 
-    function matrix_statistics(matrices, algorithm)
+    function matrix_collection_statistics(matrices, algorithm)
         values = Float64[]
         times = Float64[]
         for matrix in matrices
@@ -32,48 +35,196 @@ include(joinpath(@__DIR__, "hoffman_summary.jl"))
         return maximum(values), mean(times)
     end
 
-    function random_tilde_matrices(rng, m_p, m_q, n)
+    function random_rational_signomial(rng, m_p, m_q, n)
         numerator_exponents = rand(rng, m_p, n)
         denominator_exponents = rand(rng, m_q, n)
-        return vec(TropicalNN._tilde_matrices((numerator_exponents, denominator_exponents)))
+        numerator = Signomial(
+            zeros(m_p),
+            [collect(row) for row in eachrow(numerator_exponents)];
+            sorted = false,
+        )
+        denominator = Signomial(
+            zeros(m_q),
+            [collect(row) for row in eachrow(denominator_exponents)];
+            sorted = false,
+        )
+        return RationalSignomial(numerator, denominator)
     end
 
-    function sampled_lower_hoff(matrix, num_samples)
-        return lower_hoffman_constant(matrix, num_samples)
+    function brute_force_candidate_count(matrix)
+        count = 0
+        for subset_size in 1:min(size(matrix)...)
+            for subset in TropicalNN.Combinatorics.combinations(
+                    1:size(matrix, 1),
+                    subset_size,
+            )
+                LinearAlgebra.rank(matrix[subset, :]) == subset_size && (count += 1)
+            end
+        end
+        return count
     end
 
-    function warm_up_algorithms()
+    one_tenth_sample_count(candidate_count) = cld(candidate_count, 10)
+
+    function lower_statistics(matrices)
+        values = Float64[]
+        times = Float64[]
+        candidate_counts = Int[]
+        sample_counts = Int[]
+        for matrix in matrices
+            candidate_count = brute_force_candidate_count(matrix)
+            sample_count = one_tenth_sample_count(candidate_count)
+            value, seconds = timed_value(
+                () -> lower_hoffman_constant(matrix, sample_count),
+            )
+            push!(values, Float64(value))
+            push!(times, seconds)
+            push!(candidate_counts, candidate_count)
+            push!(sample_counts, sample_count)
+        end
+        total_candidates = sum(candidate_counts)
+        total_samples = sum(sample_counts)
+        return (
+            value = maximum(values; init = 0.0),
+            mean_seconds = isempty(times) ? 0.0 : mean(times),
+            candidate_count = total_candidates,
+            sample_count = total_samples,
+            sampling_fraction = iszero(total_candidates) ? 0.0 :
+                total_samples / total_candidates,
+            min_samples_per_matrix = isempty(sample_counts) ? 0 :
+                minimum(sample_counts),
+            max_samples_per_matrix = isempty(sample_counts) ? 0 :
+                maximum(sample_counts),
+            matrix_count = length(matrices),
+        )
+    end
+
+    function function_lower_statistics(f, mode)
+        filtered = TropicalNN._hoffman_nonzero_terms(f)
+        exponent_matrices, _ = TropicalNN._linearmap_matrices(filtered)
+        matrices = TropicalNN._hoffman_cell_matrices(
+            filtered,
+            exponent_matrices;
+            mode = mode,
+        )
+        return lower_statistics(matrices)
+    end
+
+    function warm_up_algorithms(highs_threads = 1)
         matrix = [1.0 0.0; 0.0 1.0; -1.0 -1.0]
         hoffman_constant(matrix; brute_force=true)
         hoffman_constant(matrix)
-        sampled_lower_hoff(matrix, 1)
+        lower_hoffman_constant(matrix, one_tenth_sample_count(
+            brute_force_candidate_count(matrix),
+        ))
         upper_hoffman_constant(matrix)
+        f = random_rational_signomial(Random.MersenneTwister(0), 2, 1, 2)
+        mode = HiGHSMode(threads = highs_threads)
+        Random.seed!(0)
+        hoffman_constant(f; brute_force = true, mode = mode)
+        hoffman_constant(f; mode = mode)
+        function_lower_statistics(f, mode)
+        upper_hoffman_constant(f; mode = mode)
         return nothing
     end
 
-    function compute_hoffman_sample(job)
+    function function_cell_matrix_count(f, mode)
+        filtered = TropicalNN._hoffman_nonzero_terms(f)
+        exponent_matrices, _ = TropicalNN._linearmap_matrices(filtered)
+        return length(TropicalNN._hoffman_cell_matrices(
+            filtered,
+            exponent_matrices;
+            mode = mode,
+        ))
+    end
+
+    function compute_function_hoffman_sample(job)
         println("  sample $(job.sample)/$(job.num_samples)")
+        f = random_rational_signomial(
+            Random.MersenneTwister(job.function_seed),
+            job.m_p,
+            job.m_q,
+            job.n,
+        )
+        mode = HiGHSMode(threads = job.highs_threads)
         Random.seed!(job.lower_seed)
 
-        lower, lower_time = matrix_statistics(
-            job.matrices, matrix -> sampled_lower_hoff(matrix, job.lower_samples))
-        brute, brute_time = matrix_statistics(
-            job.matrices, matrix -> hoffman_constant(matrix; brute_force=true))
-        pvz, pvz_time = matrix_statistics(job.matrices, hoffman_constant)
-        upper, upper_time = matrix_statistics(job.matrices, upper_hoffman_constant)
+        lower_result, lower_time = timed_value(
+            () -> function_lower_statistics(f, mode),
+        )
+        brute, brute_time = timed_value(
+            () -> hoffman_constant(f; brute_force = true, mode = mode),
+        )
+        pvz, pvz_time = timed_value(() -> hoffman_constant(f; mode = mode))
+        upper, upper_time = timed_value(() -> upper_hoffman_constant(f; mode = mode))
 
         return (
+            Benchmark = "function_H_pq",
             Sample = job.sample,
-            LowerHoffman = lower,
-            LowerMeanSeconds = lower_time,
+            FunctionSeed = job.function_seed,
+            LowerSeed = job.lower_seed,
+            LowerSamplePolicy = LOWER_SAMPLE_POLICY,
+            BruteForceCandidates = lower_result.candidate_count,
+            LowerSamples = lower_result.sample_count,
+            LowerSamplingFraction = lower_result.sampling_fraction,
+            MinLowerSamplesPerCellMatrix = lower_result.min_samples_per_matrix,
+            MaxLowerSamplesPerCellMatrix = lower_result.max_samples_per_matrix,
+            CoefficientPolicy = "all_zero",
+            CellMatrices = lower_result.matrix_count,
+            LowerHoffman = lower_result.value,
+            LowerSeconds = lower_time,
             BruteForceHoffman = brute,
-            BruteForceMeanSeconds = brute_time,
+            BruteForceSeconds = brute_time,
             PVZHoffman = pvz,
-            PVZMeanSeconds = pvz_time,
-            ExactAbsoluteDifference = abs(brute - pvz),
+            PVZSeconds = pvz_time,
             PVZSpeedup = brute_time / pvz_time,
             UpperHoffman = upper,
-            UpperMeanSeconds = upper_time,
+            UpperSeconds = upper_time,
+        )
+    end
+
+    function compute_matrix_collection_sample(job)
+        println("  all-pairs matrix sample $(job.sample)/$(job.num_samples)")
+        rng = Random.MersenneTwister(job.function_seed)
+        numerator_exponents = rand(rng, job.m_p, job.n)
+        denominator_exponents = rand(rng, job.m_q, job.n)
+        matrices = vec(TropicalNN._tilde_matrices((
+            numerator_exponents,
+            denominator_exponents,
+        )))
+        Random.seed!(job.lower_seed)
+        lower_result = lower_statistics(matrices)
+        brute, brute_time = matrix_collection_statistics(
+            matrices,
+            matrix -> hoffman_constant(matrix; brute_force = true),
+        )
+        pvz, pvz_time = matrix_collection_statistics(matrices, hoffman_constant)
+        upper, upper_time = matrix_collection_statistics(
+            matrices,
+            upper_hoffman_constant,
+        )
+        return (
+            Benchmark = "all_pairs_matrix_collection",
+            Sample = job.sample,
+            FunctionSeed = job.function_seed,
+            LowerSeed = job.lower_seed,
+            LowerSamplePolicy = LOWER_SAMPLE_POLICY,
+            BruteForceCandidates = lower_result.candidate_count,
+            LowerSamples = lower_result.sample_count,
+            LowerSamplingFraction = lower_result.sampling_fraction,
+            MinLowerSamplesPerCellMatrix = lower_result.min_samples_per_matrix,
+            MaxLowerSamplesPerCellMatrix = lower_result.max_samples_per_matrix,
+            CoefficientPolicy = "not_applicable",
+            CellMatrices = length(matrices),
+            LowerHoffman = lower_result.value,
+            LowerSeconds = lower_result.mean_seconds,
+            BruteForceHoffman = brute,
+            BruteForceSeconds = brute_time,
+            PVZHoffman = pvz,
+            PVZSeconds = pvz_time,
+            PVZSpeedup = brute_time / pvz_time,
+            UpperHoffman = upper,
+            UpperSeconds = upper_time,
         )
     end
 end
@@ -91,25 +242,35 @@ const DEFAULT_CONFIGURATIONS = [
 
 function empty_hoffman_results()
     return DataFrame(
+        Benchmark = String[],
         MP = Int[],
         MQ = Int[],
         N = Int[],
         Sample = Int[],
+        FunctionSeed = UInt64[],
+        LowerSeed = UInt64[],
+        LowerSamplePolicy = String[],
+        BruteForceCandidates = Int[],
+        LowerSamples = Int[],
+        LowerSamplingFraction = Float64[],
+        MinLowerSamplesPerCellMatrix = Int[],
+        MaxLowerSamplesPerCellMatrix = Int[],
+        CoefficientPolicy = String[],
+        CellMatrices = Int[],
         LowerHoffman = Float64[],
-        LowerMeanSeconds = Float64[],
+        LowerSeconds = Float64[],
         BruteForceHoffman = Float64[],
-        BruteForceMeanSeconds = Float64[],
+        BruteForceSeconds = Float64[],
         PVZHoffman = Float64[],
-        PVZMeanSeconds = Float64[],
-        ExactAbsoluteDifference = Float64[],
+        PVZSeconds = Float64[],
         PVZSpeedup = Float64[],
         UpperHoffman = Float64[],
-        UpperMeanSeconds = Float64[],
+        UpperSeconds = Float64[],
     )
 end
 
-function write_hoffman_results(output_dir, results)
-    output_path = joinpath(output_dir, "hoffman_samples.csv")
+function write_hoffman_results(output_dir, results, filename)
+    output_path = joinpath(output_dir, filename)
     temporary_path = output_path * ".tmp"
     CSV.write(temporary_path, results)
     mv(temporary_path, output_path; force = true)
@@ -137,64 +298,87 @@ end
 
 function compute_table(config;
         num_samples = 30,
-        lower_samples = 100,
         rng = Random.default_rng(),
         lower_rng = Random.default_rng(),
         workers = nothing,
+        benchmark = :function,
+        highs_threads = 1,
 )
-    results = DataFrame(
-        Sample = Int[],
-        LowerHoffman = Float64[],
-        LowerMeanSeconds = Float64[],
-        BruteForceHoffman = Float64[],
-        BruteForceMeanSeconds = Float64[],
-        PVZHoffman = Float64[],
-        PVZMeanSeconds = Float64[],
-        ExactAbsoluteDifference = Float64[],
-        PVZSpeedup = Float64[],
-        UpperHoffman = Float64[],
-        UpperMeanSeconds = Float64[],
-    )
-
     jobs = [(
         sample = sample,
         num_samples = num_samples,
-        matrices = random_tilde_matrices(rng, config.m_p, config.m_q, config.n),
-        lower_samples = lower_samples,
+        m_p = config.m_p,
+        m_q = config.m_q,
+        n = config.n,
+        function_seed = rand(rng, UInt64),
         lower_seed = rand(lower_rng, UInt64),
+        highs_threads = highs_threads,
     ) for sample in 1:num_samples]
 
-    sample_results = if workers === nothing
-        map(compute_hoffman_sample, jobs)
+    sample_function = if benchmark == :function
+        compute_function_hoffman_sample
+    elseif benchmark == :matrix_collection
+        compute_matrix_collection_sample
     else
-        Distributed.pmap(compute_hoffman_sample, workers, jobs)
+        throw(ArgumentError("unknown Hoffman benchmark: $benchmark"))
     end
 
-    for result in sample_results
-        push!(results, result)
+    sample_results = if workers === nothing
+        map(sample_function, jobs)
+    else
+        Distributed.pmap(sample_function, workers, jobs)
     end
-    return results
+    return DataFrame(sample_results)
 end
 
-function warm_up_sample_workers(workers)
-    warm_up_algorithms()
+function warm_up_sample_workers(workers, highs_threads)
+    warm_up_algorithms(highs_threads)
     workers === nothing && return nothing
 
     @sync for pid in Distributed.workers(workers)
-        @async Distributed.remotecall_wait(warm_up_algorithms, pid)
+        @async Distributed.remotecall_wait(warm_up_algorithms, pid, highs_threads)
     end
     return nothing
 end
 
 function run_hoffman_tables(args = ARGS)
     num_samples = parse(Int, option_value(args, "--hoffman-samples", "30"))
-    lower_samples = parse(Int, option_value(args, "--hoffman-lower-samples", "100"))
+    any(arg -> startswith(arg, "--hoffman-lower-samples"), args) && error(
+        "--hoffman-lower-samples was removed; the lower budget is now one tenth " *
+        "of each matrix's brute-force candidate count, rounded up",
+    )
     seed = parse(Int, option_value(args, "--hoffman-seed", "2024"))
-    default_output = joinpath(@__DIR__, "..", "outputs", "effective_radius")
+    default_output = joinpath(
+        @__DIR__,
+        "..",
+        "outputs",
+        "effective_radius",
+        "function_benchmark",
+    )
     output_dir = option_value(args, "--hoffman-output", default_output)
     configurations = selected_configurations(args)
+    benchmark_name = option_value(args, "--hoffman-benchmark", "function")
+    benchmark = if benchmark_name == "function"
+        :function
+    elseif benchmark_name == "matrix_collection"
+        :matrix_collection
+    else
+        error("--hoffman-benchmark must be function or matrix_collection")
+    end
+    samples_filename = benchmark == :function ?
+        "hoffman_samples.csv" : "all_pairs_matrix_samples.csv"
+    summary_filename = benchmark == :function ?
+        "hoffman_summary.csv" : "all_pairs_matrix_summary.csv"
+    existing_outputs = filter(isfile, [
+        joinpath(output_dir, samples_filename),
+        joinpath(output_dir, summary_filename),
+    ])
+    isempty(existing_outputs) || error(
+        "refusing to overwrite Hoffman outputs; choose a new --hoffman-output directory: " *
+        join(existing_outputs, ", "),
+    )
 
-    warm_up_sample_workers(HOFFMAN_WORKERS)
+    warm_up_sample_workers(HOFFMAN_WORKERS, EXPERIMENT_RUNTIME.highs_threads)
     rng = MersenneTwister(seed)
     lower_rng = MersenneTwister(seed)
     mkpath(output_dir)
@@ -209,10 +393,11 @@ function run_hoffman_tables(args = ARGS)
         println("Hoffman table: m_p=$(config.m_p), m_q=$(config.m_q), n=$(config.n)")
         table = compute_table(config;
             num_samples = num_samples,
-            lower_samples = lower_samples,
             rng = rng,
             lower_rng = lower_rng,
             workers = HOFFMAN_WORKERS,
+            benchmark = benchmark,
+            highs_threads = EXPERIMENT_RUNTIME.highs_threads,
         )
         insertcols!(
             table,
@@ -222,11 +407,18 @@ function run_hoffman_tables(args = ARGS)
             :N => fill(config.n, nrow(table)),
         )
         append!(results, table; cols = :setequal, promote = false)
-        results_path = write_hoffman_results(output_dir, results)
-        summary_path = write_hoffman_summary(output_dir, results, num_samples)
+        results_path = write_hoffman_results(output_dir, results, samples_filename)
+        summary_path = write_hoffman_summary(
+            output_dir,
+            results,
+            num_samples;
+            filename = summary_filename,
+        )
         println("Saved $results_path")
         println("Saved $summary_path")
     end
 end
 
-run_hoffman_tables()
+if abspath(PROGRAM_FILE) == @__FILE__
+    run_hoffman_tables()
+end

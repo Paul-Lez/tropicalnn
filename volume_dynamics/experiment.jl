@@ -3,6 +3,7 @@ module VolumeDynamicsExperiment
 import Flux
 using JLD2
 import MLUtils
+import Oscar
 import Plots
 using Printf
 import Random
@@ -96,8 +97,7 @@ Base.@kwdef struct ExperimentConfig
     batch_size::Int = 16
     learning_rate::Float64 = 1e-3
     weight_decay::Float64 = 1e-4
-    max_steps::Int = 4000
-    checkpoint_every::Int = 100
+    epochs::Int = 200
     seeds::Vector{Int} = [20260827]
 end
 
@@ -208,8 +208,7 @@ function _validate_config(config::ExperimentConfig)
     config.batch_size > 0 || throw(ArgumentError("batch size must be positive"))
     config.learning_rate > 0 || throw(ArgumentError("learning rate must be positive"))
     config.weight_decay >= 0 || throw(ArgumentError("weight decay must be nonnegative"))
-    config.max_steps > 0 || throw(ArgumentError("maximum step count must be positive"))
-    config.checkpoint_every > 0 || throw(ArgumentError("checkpoint interval must be positive"))
+    config.epochs > 0 || throw(ArgumentError("epoch count must be positive"))
     isempty(config.seeds) && throw(ArgumentError("at least one seed is required"))
     all(>=(0), config.seeds) || throw(ArgumentError("seeds must be nonnegative"))
     allunique(config.seeds) || throw(ArgumentError("seeds must be unique"))
@@ -258,8 +257,7 @@ function config_from_env()
         batch_size = _parse_int_env("VOLUME_BATCH_SIZE", 16),
         learning_rate = _parse_float_env("VOLUME_LEARNING_RATE", 1e-3),
         weight_decay = _parse_float_env("VOLUME_WEIGHT_DECAY", 1e-4),
-        max_steps = _parse_int_env("VOLUME_MAX_STEPS", 4000),
-        checkpoint_every = _parse_int_env("VOLUME_CHECKPOINT_EVERY", 100),
+        epochs = _parse_int_env("VOLUME_EPOCHS", 200),
         seeds = _parse_seeds(get(ENV, "VOLUME_SEEDS", "20260827")),
     )
     return _validate_config(config)
@@ -277,8 +275,9 @@ function _config_data(config::ExperimentConfig, seed::Integer)
         "batch_size" => config.batch_size,
         "learning_rate" => config.learning_rate,
         "weight_decay" => config.weight_decay,
-        "max_steps" => config.max_steps,
-        "checkpoint_every" => config.checkpoint_every,
+        "epochs" => config.epochs,
+        "steps_per_epoch" => cld(config.train_size, config.batch_size),
+        "checkpoint_cadence" => "every_epoch",
         "analysis_domain" => "whole_plane",
         "seed" => Int(seed),
         "optimizer" => "AdamW",
@@ -326,26 +325,33 @@ function _parameter_norm(model)
     return sqrt(sum(sum(abs2, layer.weight) + sum(abs2, layer.bias) for layer in dense_layers))
 end
 
-function _checkpoint_path(run_path, step::Integer)
-    return joinpath(run_path, "checkpoints", lpad(string(step), 8, '0'))
+function _checkpoint_path(run_path, epoch::Integer)
+    return joinpath(run_path, "checkpoints", lpad(string(epoch), 8, '0'))
 end
 
-function _save_checkpoint(model, run_path, step::Integer)
+function _save_checkpoint(model, run_path, epoch::Integer, step::Integer, examples_seen::Integer)
     dense_layers = filter(layer -> layer isa Flux.Dense, model.layers)
     weights = [Rational{BigInt}.(layer.weight) for layer in dense_layers]
     biases = [Rational{BigInt}.(layer.bias) for layer in dense_layers]
-    checkpoint_path = _checkpoint_path(run_path, step)
+    checkpoint_path = _checkpoint_path(run_path, epoch)
     mkpath(checkpoint_path)
     temporary_path = joinpath(checkpoint_path, "parameters.jld2.tmp")
-    JLD2.jldsave(temporary_path; weights, biases, step = Int(step))
+    JLD2.jldsave(
+        temporary_path;
+        weights,
+        biases,
+        epoch = Int(epoch),
+        step = Int(step),
+        examples_seen = Int(examples_seen),
+    )
     mv(temporary_path, joinpath(checkpoint_path, "parameters.jld2"); force = true)
 end
 
 function _empty_training_data()
     return Dict{String, Any}(
+        "epoch" => Int[],
         "step" => Int[],
         "examples_seen" => Int[],
-        "equivalent_epochs" => Float64[],
         "train_loss" => Float64[],
         "validation_loss" => Float64[],
         "train_accuracy" => Float64[],
@@ -354,23 +360,31 @@ function _empty_training_data()
     )
 end
 
-function _record_checkpoint!(training_data, model, dataset, run_path, step, examples_seen)
+function _record_checkpoint!(
+        training_data,
+        model,
+        dataset,
+        run_path,
+        epoch,
+        step,
+        examples_seen,
+)
     train_metrics = _metrics(model, dataset.train)
     validation_metrics = _metrics(model, dataset.validation)
+    push!(training_data["epoch"], epoch)
     push!(training_data["step"], step)
     push!(training_data["examples_seen"], examples_seen)
-    push!(training_data["equivalent_epochs"], examples_seen / length(dataset.train.labels))
     push!(training_data["train_loss"], train_metrics.loss)
     push!(training_data["validation_loss"], validation_metrics.loss)
     push!(training_data["train_accuracy"], train_metrics.accuracy)
     push!(training_data["validation_accuracy"], validation_metrics.accuracy)
     push!(training_data["parameter_norm"], _parameter_norm(model))
-    _save_checkpoint(model, run_path, step)
+    _save_checkpoint(model, run_path, epoch, step, examples_seen)
     JLD2.jldsave(joinpath(run_path, "training_data.jld2"); training_data)
     @printf(
-        "  step %d  epochs %.2f  loss %.4f  train %.4f  validation %.4f\n",
+        "  epoch %d  step %d  loss %.4f  train %.4f  validation %.4f\n",
+        epoch,
         step,
-        last(training_data["equivalent_epochs"]),
         train_metrics.loss,
         train_metrics.accuracy,
         validation_metrics.accuracy,
@@ -379,11 +393,11 @@ end
 
 """
     train_model!(model, dataset, run_path; batch_size, learning_rate,
-                 weight_decay, max_steps, checkpoint_every, rng)
+                 weight_decay, epochs, rng)
 
-Train a Float64 logit model for a fixed number of optimizer updates. Save the
-untrained model at step zero and exact-rational checkpoints thereafter. The test
-split is evaluated only once, after training.
+Train a Float64 logit model for a fixed number of complete epochs. Save the
+untrained model at epoch zero and an exact-rational checkpoint after every
+epoch. The test split is evaluated only once, after training.
 """
 function train_model!(
         model,
@@ -392,15 +406,13 @@ function train_model!(
         batch_size::Integer,
         learning_rate::Real,
         weight_decay::Real,
-        max_steps::Integer,
-        checkpoint_every::Integer,
+        epochs::Integer,
         rng::Random.AbstractRNG,
 )
     batch_size > 0 || throw(ArgumentError("batch size must be positive"))
     learning_rate > 0 || throw(ArgumentError("learning rate must be positive"))
     weight_decay >= 0 || throw(ArgumentError("weight decay must be nonnegative"))
-    max_steps > 0 || throw(ArgumentError("maximum step count must be positive"))
-    checkpoint_every > 0 || throw(ArgumentError("checkpoint interval must be positive"))
+    epochs > 0 || throw(ArgumentError("epoch count must be positive"))
 
     train_features, train_labels = _model_input(dataset.train)
     loader = Flux.DataLoader(
@@ -416,9 +428,9 @@ function train_model!(
     training_data = _empty_training_data()
     step = 0
     examples_seen = 0
-    _record_checkpoint!(training_data, model, dataset, run_path, step, examples_seen)
+    _record_checkpoint!(training_data, model, dataset, run_path, 0, step, examples_seen)
 
-    while step < max_steps
+    for epoch in 1:epochs
         for (features, labels) in loader
             _, gradients = Flux.withgradient(model) do current_model
                 Flux.logitbinarycrossentropy(current_model(features), labels)
@@ -426,16 +438,21 @@ function train_model!(
             Flux.update!(optimizer_state, model, gradients[1])
             step += 1
             examples_seen += size(labels, 2)
-
-            if step % checkpoint_every == 0 || step == max_steps
-                _record_checkpoint!(training_data, model, dataset, run_path, step, examples_seen)
-            end
-            step == max_steps && break
         end
+        _record_checkpoint!(
+            training_data,
+            model,
+            dataset,
+            run_path,
+            epoch,
+            step,
+            examples_seen,
+        )
     end
 
     test_metrics = _metrics(model, dataset.test)
     final_metrics = Dict{String, Any}(
+        "epoch" => epochs,
         "step" => step,
         "test_loss" => test_metrics.loss,
         "test_accuracy" => test_metrics.accuracy,
@@ -497,7 +514,7 @@ function plot_data_distribution(path, dataset::BinaryDataset)
     Plots.savefig(figure, path)
 end
 
-function _checkpoint_steps(run_path)
+function _checkpoint_epochs(run_path)
     checkpoint_root = joinpath(run_path, "checkpoints")
     isdir(checkpoint_root) || return Int[]
     names = filter(readdir(checkpoint_root)) do name
@@ -506,24 +523,67 @@ function _checkpoint_steps(run_path)
     return sort(parse.(Int, names))
 end
 
+"""Return per-region and per-polyhedron combinatorial data."""
+function _polyhedral_data(linear_regions)
+    data = Dict{String, Vector}(
+        "polyhedra_per_region" => Int[],
+        "bounded" => Bool[],
+        "vertices_per_region" => Int[],
+        "vertices_per_polyhedron" => Int[],
+        "facets_per_polyhedron" => Int[],
+        "rays_per_polyhedron" => Int[],
+    )
+    for components in values(linear_regions), polyhedra in components
+        push!(data["polyhedra_per_region"], length(polyhedra))
+        push!(data["bounded"], all(Oscar.is_bounded, polyhedra))
+        region_vertices = Set{Tuple}()
+        for polyhedron in polyhedra
+            vertices = collect(Oscar.vertices(polyhedron))
+            union!(region_vertices, Tuple.(vertices))
+            push!(data["vertices_per_polyhedron"], length(vertices))
+            push!(data["facets_per_polyhedron"], Oscar.n_facets(polyhedron))
+            push!(data["rays_per_polyhedron"], Oscar.n_rays(polyhedron))
+        end
+        push!(data["vertices_per_region"], length(region_vertices))
+    end
+    return data
+end
+
 
 """
 Analyze every rational checkpoint over the whole input plane. The canonical
 `graph.jld2` includes bounded and unbounded regions without domain clipping.
+Hoffman constants use the pruned rational signomial and exhaustive matrix
+subsets. The library evaluates the Hoffman LPs and rank tests in floating point.
 """
 function analyze_checkpoints(run_path; mode, workers = nothing)
-    steps = _checkpoint_steps(run_path)
-    isempty(steps) && throw(ArgumentError("no checkpoints found in $run_path"))
+    epochs = _checkpoint_epochs(run_path)
+    isempty(epochs) && throw(ArgumentError("no checkpoints found in $run_path"))
 
     monomial_data = Dict{String, Any}(
+        "epoch" => Int[],
         "step" => Int[],
         "pre" => Int[],
         "post" => Int[],
     )
-    for step in steps
-        println("  analyzing step $step")
-        checkpoint_path = _checkpoint_path(run_path, step)
+    checkpoint_data = Dict{String, Any}(
+        "epoch" => Int[],
+        "step" => Int[],
+        "hoffman_constant" => Float64[],
+        "hoffman_algorithm" => "brute_force",
+        "hoffman_norm" => "infinity",
+        "hoffman_representation" => "pruned_rational_signomial",
+        "hoffman_evaluation" => "floating_point_lp_and_rank_tests",
+    )
+    for epoch in epochs
+        println("  analyzing epoch $epoch")
+        checkpoint_path = _checkpoint_path(run_path, epoch)
         parameters = JLD2.load(joinpath(checkpoint_path, "parameters.jld2"))
+        Int(parameters["epoch"]) == epoch || throw(ArgumentError(
+            "checkpoint directory $epoch contains parameters for epoch " *
+            string(parameters["epoch"]),
+        ))
+        step = Int(parameters["step"])
         weights = parameters["weights"]
         biases = parameters["biases"]
         thresholds = [zeros(Rational{BigInt}, length(bias)) for bias in biases[1:(end - 1)]]
@@ -532,6 +592,7 @@ function analyze_checkpoints(run_path; mode, workers = nothing)
         post_pruning = TropicalNN.prune(pre_pruning; mode = mode, workers = workers)
         regions = TropicalNN.map_statistic(identity, post_pruning; mode = mode)
         graph = TropicalNN.get_graph(regions)
+        polyhedral_data = _polyhedral_data(regions)
         edge_data = Dict(
             "directions" => TropicalNN._edge_directions(graph)["full"],
             "lengths" => TropicalNN._edge_lengths(graph)["full"],
@@ -539,19 +600,26 @@ function analyze_checkpoints(run_path; mode, workers = nothing)
 
         JLD2.jldsave(joinpath(checkpoint_path, "graph.jld2"); graph)
         JLD2.jldsave(joinpath(checkpoint_path, "edge_data.jld2"); edge_data)
+        JLD2.jldsave(joinpath(checkpoint_path, "polyhedral_data.jld2"); polyhedral_data)
+        push!(monomial_data["epoch"], epoch)
         push!(monomial_data["step"], step)
         push!(monomial_data["pre"], monomial_count(pre_pruning))
         push!(monomial_data["post"], monomial_count(post_pruning))
+        # With two input variables, exhaustive row-subset enumeration is small.
+        # The function-level API retains only full-dimensional dominance cells.
+        hoffman = hoffman_constant(post_pruning; brute_force = true, mode = mode)
+        push!(checkpoint_data["epoch"], epoch)
+        push!(checkpoint_data["step"], step)
+        push!(checkpoint_data["hoffman_constant"], Float64(hoffman))
+        # Release GLPK models before beginning the next checkpoint's Oscar work.
+        GC.gc()
     end
     JLD2.jldsave(joinpath(run_path, "monomial_data.jld2"); monomial_data)
+    JLD2.jldsave(joinpath(run_path, "checkpoint_data.jld2"); checkpoint_data)
     return monomial_data
 end
 
-function _expected_checkpoint_steps(config::ExperimentConfig)
-    steps = collect(0:config.checkpoint_every:config.max_steps)
-    last(steps) == config.max_steps || push!(steps, config.max_steps)
-    return steps
-end
+_expected_checkpoint_epochs(config::ExperimentConfig) = collect(0:config.epochs)
 
 function _prepare_run_directory(run_path)
     if ispath(run_path)
@@ -587,18 +655,20 @@ function _completed_run_matches(run_path, config::ExperimentConfig, seed::Intege
         "training_data.jld2",
         "final_metrics.jld2",
         "monomial_data.jld2",
+        "checkpoint_data.jld2",
     )
     all(name -> isfile(joinpath(run_path, name)), required_files) || return false
     saved_config = JLD2.load(joinpath(run_path, "config.jld2"))["config_data"]
     saved_config == _config_data(config, seed) || return false
-    steps = _checkpoint_steps(run_path)
-    steps == _expected_checkpoint_steps(config) || return false
-    return all(steps) do step
-        checkpoint_path = _checkpoint_path(run_path, step)
+    epochs = _checkpoint_epochs(run_path)
+    epochs == _expected_checkpoint_epochs(config) || return false
+    return all(epochs) do epoch
+        checkpoint_path = _checkpoint_path(run_path, epoch)
         all(name -> isfile(joinpath(checkpoint_path, name)), (
             "parameters.jld2",
             "graph.jld2",
             "edge_data.jld2",
+            "polyhedral_data.jld2",
         ))
     end
 end
@@ -634,8 +704,7 @@ function _run_seed(config, seed, run_path; mode, workers)
         batch_size = config.batch_size,
         learning_rate = config.learning_rate,
         weight_decay = config.weight_decay,
-        max_steps = config.max_steps,
-        checkpoint_every = config.checkpoint_every,
+        epochs = config.epochs,
         rng = _seed_rng(seed, 2),
     )
     analyze_checkpoints(run_path; mode = mode, workers = workers)

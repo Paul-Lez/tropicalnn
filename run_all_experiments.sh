@@ -37,6 +37,9 @@ run_in_dir() {
 }
 
 write_metadata
+run_from_root "run_manifest.jl" \
+    "$ROOT/outputs/run_manifest.toml" \
+    "$0" "${EXPERIMENT_ARGS[@]}"
 
 run_in_dir "visualize_linear_regions" "main.jl" "${EXPERIMENT_ARGS[@]}"
 run_in_dir "effective_radius" "main.jl" "${EXPERIMENT_ARGS[@]}"

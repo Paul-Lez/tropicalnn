@@ -190,19 +190,19 @@ function smoke_volume_dynamics_main()
         test_size = 8,
     )
     VolumeDynamicsExperiment.save_dataset(joinpath(data_path, "dataset.jld2"), dataset)
-    model = VolumeDynamicsExperiment.build_model(Random.MersenneTwister(102), 2)
+    model = VolumeDynamicsExperiment.build_model(Random.MersenneTwister(102), 1)
     @assert eltype(model[1].weight) == Float64
     training_data, _ = VolumeDynamicsExperiment.train_model!(
         model,
         dataset,
         data_path;
-        batch_size = 4,
+        batch_size = 20,
         learning_rate = 1e-3,
         weight_decay = 1e-4,
-        max_steps = 1,
-        checkpoint_every = 1,
+        epochs = 1,
         rng = Random.MersenneTwister(103),
     )
+    @assert training_data["epoch"] == [0, 1]
     @assert training_data["step"] == [0, 1]
     parameters = JLD2.load(joinpath(
         data_path, "checkpoints", "00000000", "parameters.jld2"
@@ -223,7 +223,9 @@ function smoke_volume_dynamics_analyse()
     graph = JLD2.load(joinpath(
         data_path, "checkpoints", "00000000", "graph.jld2"
     ))["graph"]
+    @assert training_data["epoch"] == [0, 1]
     @assert training_data["step"] == [0, 1]
+    @assert final_metrics["epoch"] == 1
     @assert final_metrics["step"] == 1
     region_volumes = [
         sum(Float64.(graph[vertex]["volume"])) for vertex in Graphs.vertices(graph)

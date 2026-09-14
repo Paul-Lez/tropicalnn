@@ -97,6 +97,9 @@ function results_summary(results, num_trials)
         :NumRegions => std => :StdNumRegions,
         :TimeSeconds => mean => :MeanTimeSeconds,
         :TimeSeconds => std => :StdTimeSeconds,
+        :TimeSeconds => median => :MedianTimeSeconds,
+        :TimeSeconds => minimum => :MinTimeSeconds,
+        :TimeSeconds => maximum => :MaxTimeSeconds,
     )
     filter!(:NumSamples => ==(num_trials), summary)
     return summary
