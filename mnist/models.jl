@@ -4,6 +4,7 @@ import Flux
 using TropicalNN
 
 export ExperimentSpec,
+       DEFAULT_NUM_SAMPLES,
        build_model,
        experiment_specs,
        model_path,
@@ -12,6 +13,7 @@ export ExperimentSpec,
 const INPUT_DIMENSION = 28^2
 const OUTPUT_DIMENSION = 10
 const MAXOUT_PIECES = 2
+const DEFAULT_NUM_SAMPLES = 30
 
 struct ExperimentSpec
     id::String
@@ -114,7 +116,12 @@ function model_to_tropical(model, spec::ExperimentSpec)
     return network
 end
 
-model_path(output_dir, spec::ExperimentSpec) =
-    joinpath(output_dir, "models", "$(spec.id).jld2")
+function sample_id(spec::ExperimentSpec, sample::Integer)
+    sample >= 1 || throw(ArgumentError("sample must be positive"))
+    return sample == 1 ? spec.id : "$(spec.id)_sample$(lpad(sample, 2, '0'))"
+end
+
+model_path(output_dir, spec::ExperimentSpec, sample::Integer = 1) =
+    joinpath(output_dir, "models", "$(sample_id(spec, sample)).jld2")
 
 end

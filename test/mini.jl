@@ -239,6 +239,12 @@ function smoke_mnist_main()
     y_train = Flux.onehotbatch([0, 1, 1, 0], 0:1)
     loader = DataLoader((X_train, y_train), batchsize=2, shuffle=false)
     requested_specs = experiment_specs()
+    @assert DEFAULT_NUM_SAMPLES == 30 "MNIST default sample count changed"
+    @assert endswith(model_path(output_dir, first(requested_specs)), "relu_d1_w4.jld2")
+    @assert endswith(
+        model_path(output_dir, first(requested_specs), 2),
+        "relu_d1_w4_sample02.jld2",
+    )
     observed_specs = [
         (spec.activation, spec.widths, spec.pieces)
         for spec in requested_specs

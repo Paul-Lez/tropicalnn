@@ -5,11 +5,17 @@ using CSV
 using DataFrames
 using Logging
 using Random
+using Statistics
 using TropicalNN
 
 const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
 const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 const OUTPUT_PATH = joinpath("outputs", "width_depth", "linear_regions.csv")
+const SUMMARY_OUTPUT_PATH = joinpath(
+    "outputs",
+    "width_depth",
+    "linear_regions_summary.csv",
+)
 const MAXOUT_PIECES = 2
 
 global_logger(SimpleLogger(stderr, Logging.Error))
@@ -24,6 +30,12 @@ function relu_network(dims)
         end
     end
     return NeuralNetwork(layers)
+end
+
+function warm_up_linear_regions()
+    network = relu_network([2, 2, 1])
+    linear_regions(network; mode = REGION_MODE, workers = WORKER_IDS)
+    return nothing
 end
 
 function experiment_architectures()
@@ -68,14 +80,40 @@ function load_results()
     return results
 end
 
-function write_results(results)
+function results_summary(results, num_trials)
+    summary = combine(
+        groupby(results, [
+            :Network,
+            :Sweep,
+            :Architecture,
+            :HiddenLayers,
+            :Width,
+            :Pieces,
+            :Algorithm,
+            :Encoding,
+        ]),
+        :Trial => length => :NumSamples,
+        :NumRegions => mean => :MeanNumRegions,
+        :NumRegions => std => :StdNumRegions,
+        :TimeSeconds => mean => :MeanTimeSeconds,
+        :TimeSeconds => std => :StdTimeSeconds,
+    )
+    filter!(:NumSamples => ==(num_trials), summary)
+    return summary
+end
+
+function write_results(results, num_trials)
     temporary_path = OUTPUT_PATH * ".tmp"
     CSV.write(temporary_path, results)
     mv(temporary_path, OUTPUT_PATH; force = true)
+
+    temporary_summary_path = SUMMARY_OUTPUT_PATH * ".tmp"
+    CSV.write(temporary_summary_path, results_summary(results, num_trials))
+    mv(temporary_summary_path, SUMMARY_OUTPUT_PATH; force = true)
 end
 
 function run_experiment()
-    num_trials = parse(Int, get(ENV, "WIDTH_DEPTH_TRIALS", "1"))
+    num_trials = parse(Int, get(ENV, "WIDTH_DEPTH_TRIALS", "30"))
     num_trials > 0 || throw(ArgumentError("WIDTH_DEPTH_TRIALS must be positive"))
 
     mkpath(dirname(OUTPUT_PATH))
@@ -87,6 +125,9 @@ function run_experiment()
     length(completed) == nrow(results) || throw(ArgumentError(
         "$OUTPUT_PATH contains duplicate experiment rows"
     ))
+
+    println("Warming up linear-region evaluation...")
+    warm_up_linear_regions()
 
     for (architecture_index, architecture) in enumerate(experiment_architectures())
         dims = architecture.dims
@@ -139,11 +180,12 @@ function run_experiment()
                     "Float64",
                 ))
                 completed[result_key] = last(eachrow(results))
-                write_results(results)
+                write_results(results, num_trials)
                 println("  $(length(regions)) regions in $(round(elapsed; digits = 2)) seconds")
             end
         end
     end
+    write_results(results, num_trials)
 end
 
 run_experiment()

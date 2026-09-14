@@ -20,6 +20,12 @@ function random_rational_signomial(n_vars, n_mons)
     return RationalSignomial(num, den)
 end
 
+function warm_up_linear_regions()
+    q = random_rational_signomial(2, 2)
+    TropicalNN.linear_regions(q; mode = REGION_MODE, workers = WORKER_IDS)
+    return nothing
+end
+
 function run_experiment()
     monomial_counts = [20, 50, 100, 200, 350, 500, 800, 1000]
     samples_per_nvars = [3 => 30, 4 => 30]
@@ -28,6 +34,9 @@ function run_experiment()
     mkpath(output_dir)
     results = DataFrame(NVars=Int[], NMonomials=Int[], Sample=Int[],
         NumRegions=Int[], Time=Float64[])
+
+    println("Warming up linear-region evaluation...")
+    warm_up_linear_regions()
 
     for (n_vars, n_samples) in samples_per_nvars
         println("--- Linear regions of random rational signomials, $n_vars variables ---")

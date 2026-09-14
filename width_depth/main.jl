@@ -23,9 +23,17 @@ function count_monomials(dims)
     return monomial_count(f_unpruned), monomial_count(f_pruned), t_unpruned, t_pruned
 end
 
+function warm_up_count_monomials()
+    count_monomials([2, 2, 1])
+    return nothing
+end
+
 function run_experiments()
     num_trials = 30
     mkpath("outputs/width_depth")
+
+    println("Warming up tropicalization and pruning...")
+    warm_up_count_monomials()
 
     widths = [2, 3, 4, 5, 6, 7, 8]
     width_results = DataFrame(Width=Int[], Unpruned_Avg=Float64[], Pruned_Avg=Float64[],

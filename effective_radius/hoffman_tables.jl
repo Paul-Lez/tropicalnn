@@ -83,7 +83,38 @@ const DEFAULT_CONFIGURATIONS = [
     (m_p = 3, m_q = 4, n = 9),
     (m_p = 5, m_q = 4, n = 8),
     (m_p = 7, m_q = 3, n = 12),
+    # Fifteen constraints in two variables stress the PVZ frontier while
+    # keeping exhaustive Hoffman enumeration small.
+    (m_p = 7, m_q = 8, n = 2),
+    (m_p = 6, m_q = 9, n = 2),
 ]
+
+function empty_hoffman_results()
+    return DataFrame(
+        MP = Int[],
+        MQ = Int[],
+        N = Int[],
+        Sample = Int[],
+        LowerHoffman = Float64[],
+        LowerMeanSeconds = Float64[],
+        BruteForceHoffman = Float64[],
+        BruteForceMeanSeconds = Float64[],
+        PVZHoffman = Float64[],
+        PVZMeanSeconds = Float64[],
+        ExactAbsoluteDifference = Float64[],
+        PVZSpeedup = Float64[],
+        UpperHoffman = Float64[],
+        UpperMeanSeconds = Float64[],
+    )
+end
+
+function write_hoffman_results(output_dir, results)
+    output_path = joinpath(output_dir, "hoffman_samples.csv")
+    temporary_path = output_path * ".tmp"
+    CSV.write(temporary_path, results)
+    mv(temporary_path, output_path; force = true)
+    return output_path
+end
 
 function option_value(args, name, default)
     prefix = "$name="
@@ -173,25 +204,29 @@ function run_hoffman_tables(args = ARGS)
             length(Distributed.workers(HOFFMAN_WORKERS)), " workers")
     end
 
-    tables = DataFrame[]
+    results = empty_hoffman_results()
     for config in configurations
         println("Hoffman table: m_p=$(config.m_p), m_q=$(config.m_q), n=$(config.n)")
-        results = compute_table(config;
+        table = compute_table(config;
             num_samples = num_samples,
             lower_samples = lower_samples,
             rng = rng,
             lower_rng = lower_rng,
             workers = HOFFMAN_WORKERS,
         )
-        filename = "table_mp$(config.m_p)_mq$(config.m_q)_n$(config.n).csv"
-        output_path = joinpath(output_dir, filename)
-        CSV.write(output_path, results)
-        push!(tables, results)
-        println("Saved $output_path")
+        insertcols!(
+            table,
+            1,
+            :MP => fill(config.m_p, nrow(table)),
+            :MQ => fill(config.m_q, nrow(table)),
+            :N => fill(config.n, nrow(table)),
+        )
+        append!(results, table; cols = :setequal, promote = false)
+        results_path = write_hoffman_results(output_dir, results)
+        summary_path = write_hoffman_summary(output_dir, results, num_samples)
+        println("Saved $results_path")
+        println("Saved $summary_path")
     end
-
-    summary_path = write_hoffman_summary(output_dir, configurations, tables)
-    println("Saved $summary_path")
 end
 
 run_hoffman_tables()
