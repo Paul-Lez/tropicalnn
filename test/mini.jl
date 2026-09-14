@@ -225,9 +225,11 @@ function smoke_volume_dynamics_analyse()
     ))["graph"]
     @assert training_data["step"] == [0, 1]
     @assert final_metrics["step"] == 1
-    @assert all(isfinite, [
+    region_volumes = [
         sum(Float64.(graph[vertex]["volume"])) for vertex in Graphs.vertices(graph)
-    ])
+    ]
+    @assert any(isinf, region_volumes)
+    @assert all(volume -> isfinite(volume) || isinf(volume), region_volumes)
     return " ($(length(training_data["step"])) metric rows)"
 end
 

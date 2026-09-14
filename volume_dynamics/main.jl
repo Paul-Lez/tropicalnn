@@ -4,7 +4,7 @@ using Logging
 using TropicalNN
 
 const EXPERIMENT_RUNTIME = setup_experiment!()
-const REGION_MODE = highs_mode(EXPERIMENT_RUNTIME)
+const REGION_MODE = TropicalNN.OscarMode()
 const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
 include(joinpath(@__DIR__, "experiment.jl"))

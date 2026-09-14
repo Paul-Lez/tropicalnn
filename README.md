@@ -17,7 +17,7 @@ From the root directory, run the `main.jl` in the experiment directory, and then
 ### Volume dynamics
 
 The volume-dynamics experiment trains in `Float64`, saves exact-rational
-checkpoints, and performs its polyhedral analysis only after each checkpoint has
+checkpoints, and performs whole-plane polyhedral analysis only after each checkpoint has
 been converted to rational arithmetic. Its default dataset is a reproducible
 two-arm spiral generated with `MLUtils`.
 
@@ -27,7 +27,7 @@ julia --project=. volume_dynamics/analyse.jl
 ```
 
 Runs are separated by seed under `outputs/volume_dynamics/<dataset>/seed_<seed>`.
-The default uses three seeds and records training/validation metrics at fixed
+The default uses one seed and records training/validation metrics at fixed
 optimizer-step intervals. The test set is evaluated only once per seed.
 
 The main settings can be changed without editing the experiment:

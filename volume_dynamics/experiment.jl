@@ -3,7 +3,6 @@ module VolumeDynamicsExperiment
 import Flux
 using JLD2
 import MLUtils
-import Oscar
 import Plots
 using Printf
 import Random
@@ -77,15 +76,13 @@ struct BinarySplit
     end
 end
 
-"""Standardized train, validation, and test splits plus their analysis domain."""
+"""Standardized train, validation, and test splits plus training-set statistics."""
 struct BinaryDataset
     train::BinarySplit
     validation::BinarySplit
     test::BinarySplit
     feature_mean::Vector{Float64}
     feature_scale::Vector{Float64}
-    analysis_lower::Vector{Float64}
-    analysis_upper::Vector{Float64}
 end
 
 """Configuration for training and exact analysis of volume dynamics."""
@@ -101,8 +98,7 @@ Base.@kwdef struct ExperimentConfig
     weight_decay::Float64 = 1e-4
     max_steps::Int = 4000
     checkpoint_every::Int = 100
-    analysis_margin::Float64 = 0.10
-    seeds::Vector{Int} = collect(20260827:20260829)
+    seeds::Vector{Int} = [20260827]
 end
 
 function _validate_sample_count(n_samples::Integer)
@@ -168,11 +164,10 @@ function _standardize(split::BinarySplit, feature_mean, feature_scale)
 end
 
 """
-    generate_dataset(generator, rng; train_size, validation_size, test_size,
-                     analysis_margin=0.1)
+    generate_dataset(generator, rng; train_size, validation_size, test_size)
 
 Generate independent train, validation, and test splits. Standardize every split
-using training-set statistics and return a bounding box containing all observations.
+using training-set statistics.
 """
 function generate_dataset(
         generator::AbstractBinaryDataGenerator,
@@ -180,9 +175,7 @@ function generate_dataset(
         train_size::Integer,
         validation_size::Integer,
         test_size::Integer,
-        analysis_margin::Real = 0.10,
 )
-    analysis_margin >= 0 || throw(ArgumentError("analysis margin must be nonnegative"))
     raw_train = generate_split(generator, rng, train_size)
     raw_validation = generate_split(generator, rng, validation_size)
     raw_test = generate_split(generator, rng, test_size)
@@ -197,18 +190,12 @@ function generate_dataset(
     validation = _standardize(raw_validation, feature_mean, feature_scale)
     test = _standardize(raw_test, feature_mean, feature_scale)
 
-    all_features = vcat(train.features, validation.features, test.features)
-    lower = vec(minimum(all_features; dims = 1))
-    upper = vec(maximum(all_features; dims = 1))
-    padding = Float64(analysis_margin) .* (upper .- lower)
     return BinaryDataset(
         train,
         validation,
         test,
         feature_mean,
         feature_scale,
-        lower .- padding,
-        upper .+ padding,
     )
 end
 
@@ -223,7 +210,6 @@ function _validate_config(config::ExperimentConfig)
     config.weight_decay >= 0 || throw(ArgumentError("weight decay must be nonnegative"))
     config.max_steps > 0 || throw(ArgumentError("maximum step count must be positive"))
     config.checkpoint_every > 0 || throw(ArgumentError("checkpoint interval must be positive"))
-    config.analysis_margin >= 0 || throw(ArgumentError("analysis margin must be nonnegative"))
     isempty(config.seeds) && throw(ArgumentError("at least one seed is required"))
     all(>=(0), config.seeds) || throw(ArgumentError("seeds must be nonnegative"))
     allunique(config.seeds) || throw(ArgumentError("seeds must be unique"))
@@ -274,8 +260,7 @@ function config_from_env()
         weight_decay = _parse_float_env("VOLUME_WEIGHT_DECAY", 1e-4),
         max_steps = _parse_int_env("VOLUME_MAX_STEPS", 4000),
         checkpoint_every = _parse_int_env("VOLUME_CHECKPOINT_EVERY", 100),
-        analysis_margin = _parse_float_env("VOLUME_ANALYSIS_MARGIN", 0.10),
-        seeds = _parse_seeds(get(ENV, "VOLUME_SEEDS", "20260827,20260828,20260829")),
+        seeds = _parse_seeds(get(ENV, "VOLUME_SEEDS", "20260827")),
     )
     return _validate_config(config)
 end
@@ -294,7 +279,7 @@ function _config_data(config::ExperimentConfig, seed::Integer)
         "weight_decay" => config.weight_decay,
         "max_steps" => config.max_steps,
         "checkpoint_every" => config.checkpoint_every,
-        "analysis_margin" => config.analysis_margin,
+        "analysis_domain" => "whole_plane",
         "seed" => Int(seed),
         "optimizer" => "AdamW",
         "loss" => "logitbinarycrossentropy",
@@ -460,7 +445,7 @@ function train_model!(
     return training_data, final_metrics
 end
 
-"""Save the dataset arrays, normalization, and analysis bounds without custom types."""
+"""Save the dataset arrays and normalization without custom types."""
 function save_dataset(path, dataset::BinaryDataset)
     JLD2.jldsave(
         path;
@@ -472,8 +457,6 @@ function save_dataset(path, dataset::BinaryDataset)
         Y_test = dataset.test.labels,
         feature_mean = dataset.feature_mean,
         feature_scale = dataset.feature_scale,
-        analysis_lower = dataset.analysis_lower,
-        analysis_upper = dataset.analysis_upper,
     )
 end
 
@@ -523,42 +506,12 @@ function _checkpoint_steps(run_path)
     return sort(parse.(Int, names))
 end
 
-function _domain_polyhedron(lower, upper)
-    length(lower) == length(upper) == 2 || throw(DimensionMismatch(
-        "the analysis domain must be two-dimensional"
-    ))
-    all(lower .< upper) || throw(ArgumentError("analysis lower bounds must be below upper bounds"))
-    matrix = Rational{BigInt}[1 0; -1 0; 0 1; 0 -1]
-    vector = Rational{BigInt}.([upper[1], -lower[1], upper[2], -lower[2]])
-    return Oscar.polyhedron(matrix, vector)
-end
 
-function _restrict_to_domain(f, lower, upper; mode)
-    regions = TropicalNN.map_statistic(identity, f; mode = mode)
-    domain = _domain_polyhedron(lower, upper)
-    restricted = Dict{Any, Any}()
-    for (linear_map, components) in regions
-        restricted_components = Vector{Vector{Any}}()
-        for component in components
-            restricted_polys = Any[]
-            for polyhedron in component
-                intersection = Oscar.intersect(polyhedron, domain)
-                if Oscar.is_feasible(intersection) && Oscar.is_fulldimensional(intersection)
-                    push!(restricted_polys, intersection)
-                end
-            end
-            isempty(restricted_polys) || push!(restricted_components, restricted_polys)
-        end
-        isempty(restricted_components) || (restricted[linear_map] = restricted_components)
-    end
-    return restricted
-end
-
-"""Analyze every rational checkpoint inside the saved data-domain bounding box."""
+"""
+Analyze every rational checkpoint over the whole input plane. The canonical
+`graph.jld2` includes bounded and unbounded regions without domain clipping.
+"""
 function analyze_checkpoints(run_path; mode, workers = nothing)
-    dataset_data = JLD2.load(joinpath(run_path, "dataset.jld2"))
-    lower = dataset_data["analysis_lower"]
-    upper = dataset_data["analysis_upper"]
     steps = _checkpoint_steps(run_path)
     isempty(steps) && throw(ArgumentError("no checkpoints found in $run_path"))
 
@@ -577,8 +530,8 @@ function analyze_checkpoints(run_path; mode, workers = nothing)
 
         pre_pruning = tropicalize(weights, biases, thresholds)[1]
         post_pruning = TropicalNN.prune(pre_pruning; mode = mode, workers = workers)
-        restricted_regions = _restrict_to_domain(post_pruning, lower, upper; mode = mode)
-        graph = TropicalNN.get_graph(restricted_regions)
+        regions = TropicalNN.map_statistic(identity, post_pruning; mode = mode)
+        graph = TropicalNN.get_graph(regions)
         edge_data = Dict(
             "directions" => TropicalNN._edge_directions(graph)["full"],
             "lengths" => TropicalNN._edge_lengths(graph)["full"],
@@ -592,6 +545,12 @@ function analyze_checkpoints(run_path; mode, workers = nothing)
     end
     JLD2.jldsave(joinpath(run_path, "monomial_data.jld2"); monomial_data)
     return monomial_data
+end
+
+function _expected_checkpoint_steps(config::ExperimentConfig)
+    steps = collect(0:config.checkpoint_every:config.max_steps)
+    last(steps) == config.max_steps || push!(steps, config.max_steps)
+    return steps
 end
 
 function _prepare_run_directory(run_path)
@@ -633,9 +592,14 @@ function _completed_run_matches(run_path, config::ExperimentConfig, seed::Intege
     saved_config = JLD2.load(joinpath(run_path, "config.jld2"))["config_data"]
     saved_config == _config_data(config, seed) || return false
     steps = _checkpoint_steps(run_path)
-    isempty(steps) && return false
+    steps == _expected_checkpoint_steps(config) || return false
     return all(steps) do step
-        isfile(joinpath(_checkpoint_path(run_path, step), "graph.jld2"))
+        checkpoint_path = _checkpoint_path(run_path, step)
+        all(name -> isfile(joinpath(checkpoint_path, name)), (
+            "parameters.jld2",
+            "graph.jld2",
+            "edge_data.jld2",
+        ))
     end
 end
 
@@ -654,7 +618,6 @@ function _run_seed(config, seed, run_path; mode, workers)
         train_size = config.train_size,
         validation_size = config.validation_size,
         test_size = config.test_size,
-        analysis_margin = config.analysis_margin,
     )
     save_dataset(joinpath(run_path, "dataset.jld2"), dataset)
     plot_data_distribution(joinpath(run_path, "data_distribution.png"), dataset)

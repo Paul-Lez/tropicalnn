@@ -2,18 +2,12 @@ using CSV
 using DataFrames
 import Graphs
 using JLD2
-import Oscar
 using Statistics
 using TropicalNN
 
-function domain_region_volumes(graph)
-    region_volumes = Float64[]
-    for vertex in Graphs.vertices(graph)
-        region_volume = sum(Float64.(graph[vertex]["volume"]))
-        isfinite(region_volume) && push!(region_volumes, region_volume)
-    end
-    return region_volumes
-end
+graph_region_volumes(graph) = [
+    sum(Float64.(graph[vertex]["volume"])) for vertex in Graphs.vertices(graph)
+]
 
 function checkpoint_steps(run_path)
     checkpoint_root = joinpath(run_path, "checkpoints")
@@ -37,6 +31,9 @@ end
 
 function export_run_to_csvs(run_path)
     config = JLD2.load(joinpath(run_path, "config.jld2"))["config_data"]
+    get(config, "analysis_domain", nothing) == "whole_plane" || throw(ArgumentError(
+        "run is not marked as a whole-plane analysis: $run_path"
+    ))
     training = JLD2.load(joinpath(run_path, "training_data.jld2"))["training_data"]
     final_metrics = JLD2.load(joinpath(run_path, "final_metrics.jld2"))["final_metrics"]
     seed = Int(config["seed"])
@@ -76,32 +73,38 @@ function export_run_to_csvs(run_path)
     CSV.write(joinpath(run_path, "monomial_counts.csv"), monomials)
 
     steps = checkpoint_steps(run_path)
-    mean_volumes = Float64[]
-    median_volumes = Float64[]
-    region_counts = Int[]
-    total_volumes = Float64[]
+    mean_finite_volumes = Float64[]
+    median_finite_volumes = Float64[]
+    finite_region_counts = Int[]
+    unbounded_region_counts = Int[]
+    total_region_counts = Int[]
     for step in steps
         checkpoint_path = joinpath(run_path, "checkpoints", lpad(string(step), 8, '0'))
         graph = JLD2.load(joinpath(checkpoint_path, "graph.jld2"))["graph"]
-        volumes = domain_region_volumes(graph)
-        isempty(volumes) && throw(ArgumentError(
-            "the clipped analysis domain has no full-dimensional regions at step $step"
+        region_volumes = graph_region_volumes(graph)
+        isempty(region_volumes) && throw(ArgumentError(
+            "the whole-plane subdivision has no full-dimensional regions at step $step"
         ))
-        push!(mean_volumes, mean(volumes))
-        push!(median_volumes, median(volumes))
-        push!(region_counts, length(volumes))
-        push!(total_volumes, sum(volumes))
+        all(volume -> isfinite(volume) || isinf(volume), region_volumes) ||
+            throw(ArgumentError("invalid whole-plane region volume at step $step"))
+        finite_volumes = filter(isfinite, region_volumes)
+        push!(mean_finite_volumes, isempty(finite_volumes) ? NaN : mean(finite_volumes))
+        push!(median_finite_volumes, isempty(finite_volumes) ? NaN : median(finite_volumes))
+        push!(finite_region_counts, length(finite_volumes))
+        push!(unbounded_region_counts, count(isinf, region_volumes))
+        push!(total_region_counts, length(region_volumes))
     end
-    domain_volumes = DataFrame(
+    region_stats = DataFrame(
         Seed = fill(seed, length(steps)),
         Step = steps,
-        Mean_Region_Volume = mean_volumes,
-        Median_Region_Volume = median_volumes,
-        Region_Count = region_counts,
-        Total_Domain_Volume = total_volumes,
+        Mean_Finite_Region_Volume = mean_finite_volumes,
+        Median_Finite_Region_Volume = median_finite_volumes,
+        Finite_Region_Count = finite_region_counts,
+        Unbounded_Region_Count = unbounded_region_counts,
+        Total_Region_Count = total_region_counts,
     )
-    CSV.write(joinpath(run_path, "domain_volume_stats.csv"), domain_volumes)
-    return metrics, final, monomials, domain_volumes
+    CSV.write(joinpath(run_path, "whole_plane_region_stats.csv"), region_stats)
+    return metrics, final, monomials, region_stats
 end
 
 _sample_std(values) = length(values) == 1 ? 0.0 : std(values)
@@ -154,16 +157,29 @@ function summarize_monomials(monomials)
     )
 end
 
-function summarize_domain_volumes(volumes)
+
+_finite_mean(values) = begin
+    finite_values = filter(isfinite, values)
+    isempty(finite_values) ? NaN : mean(finite_values)
+end
+_finite_std(values) = begin
+    finite_values = filter(isfinite, values)
+    isempty(finite_values) ? NaN : _sample_std(finite_values)
+end
+
+function summarize_region_volumes(volumes)
     return combine(
         groupby(volumes, :Step),
-        :Mean_Region_Volume => mean => :Mean_Region_Volume_Mean,
-        :Mean_Region_Volume => _sample_std => :Mean_Region_Volume_Std,
-        :Median_Region_Volume => mean => :Median_Region_Volume_Mean,
-        :Median_Region_Volume => _sample_std => :Median_Region_Volume_Std,
-        :Region_Count => mean => :Region_Count_Mean,
-        :Region_Count => _sample_std => :Region_Count_Std,
-        :Total_Domain_Volume => mean => :Total_Domain_Volume_Mean,
+        :Mean_Finite_Region_Volume => _finite_mean => :Mean_Finite_Region_Volume_Mean,
+        :Mean_Finite_Region_Volume => _finite_std => :Mean_Finite_Region_Volume_Std,
+        :Median_Finite_Region_Volume => _finite_mean => :Median_Finite_Region_Volume_Mean,
+        :Median_Finite_Region_Volume => _finite_std => :Median_Finite_Region_Volume_Std,
+        :Finite_Region_Count => mean => :Finite_Region_Count_Mean,
+        :Finite_Region_Count => _sample_std => :Finite_Region_Count_Std,
+        :Unbounded_Region_Count => mean => :Unbounded_Region_Count_Mean,
+        :Unbounded_Region_Count => _sample_std => :Unbounded_Region_Count_Std,
+        :Total_Region_Count => mean => :Total_Region_Count_Mean,
+        :Total_Region_Count => _sample_std => :Total_Region_Count_Std,
     )
 end
 
@@ -171,25 +187,25 @@ function export_to_csvs(output_root)
     metric_frames = DataFrame[]
     final_frames = DataFrame[]
     monomial_frames = DataFrame[]
-    volume_frames = DataFrame[]
+    region_frames = DataFrame[]
     for run_path in run_directories(output_root)
         println("Exporting $(basename(run_path))")
-        metrics, final, monomials, volumes = export_run_to_csvs(run_path)
+        metrics, final, monomials, regions = export_run_to_csvs(run_path)
         push!(metric_frames, metrics)
         push!(final_frames, final)
         push!(monomial_frames, monomials)
-        push!(volume_frames, volumes)
+        push!(region_frames, regions)
     end
 
     if length(metric_frames) > 1
         all_metrics = vcat(metric_frames...)
         all_finals = vcat(final_frames...)
         all_monomials = vcat(monomial_frames...)
-        all_volumes = vcat(volume_frames...)
+        all_regions = vcat(region_frames...)
         CSV.write(joinpath(output_root, "all_training_metrics.csv"), all_metrics)
         CSV.write(joinpath(output_root, "all_final_metrics.csv"), all_finals)
         CSV.write(joinpath(output_root, "all_monomial_counts.csv"), all_monomials)
-        CSV.write(joinpath(output_root, "all_domain_volume_stats.csv"), all_volumes)
+        CSV.write(joinpath(output_root, "all_whole_plane_region_stats.csv"), all_regions)
         CSV.write(
             joinpath(output_root, "training_metrics_summary.csv"),
             summarize_training(all_metrics),
@@ -203,8 +219,8 @@ function export_to_csvs(output_root)
             summarize_monomials(all_monomials),
         )
         CSV.write(
-            joinpath(output_root, "domain_volume_summary.csv"),
-            summarize_domain_volumes(all_volumes),
+            joinpath(output_root, "whole_plane_region_summary.csv"),
+            summarize_region_volumes(all_regions),
         )
     end
     println("CSV export complete")
