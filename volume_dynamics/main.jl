@@ -1,5 +1,6 @@
 include(joinpath(@__DIR__, "..", "experiment_setup.jl"))
 
+using Distributed
 using Logging
 using TropicalNN
 
@@ -9,6 +10,20 @@ const WORKER_IDS = tropical_workers(EXPERIMENT_RUNTIME)
 
 include(joinpath(@__DIR__, "experiment.jl"))
 using .VolumeDynamicsExperiment
+
+function _load_volume_dynamics_on_workers!(worker_pool)
+    worker_pool === nothing && return nothing
+    source_path = joinpath(@__DIR__, "experiment.jl")
+    for pid in Distributed.workers(worker_pool)
+        remotecall_wait(pid, source_path) do path
+            isdefined(Main, :VolumeDynamicsExperiment) || include(path)
+            nothing
+        end
+    end
+    return nothing
+end
+
+_load_volume_dynamics_on_workers!(WORKER_IDS)
 
 global_logger(SimpleLogger(stderr, Logging.Error))
 

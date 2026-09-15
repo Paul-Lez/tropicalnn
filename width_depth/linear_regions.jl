@@ -16,7 +16,7 @@ const SUMMARY_OUTPUT_PATH = joinpath(
     "width_depth",
     "linear_regions_summary.csv",
 )
-const MAXOUT_PIECES = 2
+const MAXOUT_PIECES = 3
 
 global_logger(SimpleLogger(stderr, Logging.Error))
 

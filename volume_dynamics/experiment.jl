@@ -1,6 +1,7 @@
 module VolumeDynamicsExperiment
 
 import Flux
+import Distributed
 using JLD2
 import MLUtils
 import Oscar
@@ -556,69 +557,72 @@ Analyze every rational checkpoint over the whole input plane. The canonical
 Hoffman constants use the pruned rational signomial and exhaustive matrix
 subsets. The library evaluates the Hoffman LPs and rank tests in floating point.
 """
+function _analyze_checkpoint(run_path, epoch, mode)
+    checkpoint_path = _checkpoint_path(run_path, epoch)
+    parameters = JLD2.load(joinpath(checkpoint_path, "parameters.jld2"))
+    Int(parameters["epoch"]) == epoch || throw(ArgumentError(
+        "checkpoint directory $epoch contains parameters for epoch " *
+        string(parameters["epoch"]),
+    ))
+    step = Int(parameters["step"])
+    weights = parameters["weights"]
+    biases = parameters["biases"]
+    thresholds = [zeros(Rational{BigInt}, length(bias)) for bias in biases[1:(end - 1)]]
+
+    pre_pruning = tropicalize(weights, biases, thresholds)[1]
+    # Each epoch is analyzed by one process. Do not nest another worker pool here.
+    post_pruning = TropicalNN.prune(pre_pruning; mode = mode)
+    regions = TropicalNN.map_statistic(identity, post_pruning; mode = mode)
+    graph = TropicalNN.get_graph(regions)
+    polyhedral_data = _polyhedral_data(regions)
+    edge_data = Dict(
+        "directions" => TropicalNN._edge_directions(graph)["full"],
+        "lengths" => TropicalNN._edge_lengths(graph)["full"],
+    )
+
+    JLD2.jldsave(joinpath(checkpoint_path, "graph.jld2"); graph)
+    JLD2.jldsave(joinpath(checkpoint_path, "edge_data.jld2"); edge_data)
+    JLD2.jldsave(joinpath(checkpoint_path, "polyhedral_data.jld2"); polyhedral_data)
+    hoffman = hoffman_constant(post_pruning; brute_force = true, mode = mode)
+    GC.gc()
+    return (
+        epoch = epoch,
+        step = step,
+        pre = monomial_count(pre_pruning),
+        post = monomial_count(post_pruning),
+        hoffman_constant = Float64(hoffman),
+    )
+end
+
+"""Analyze checkpoints sequentially per epoch and in parallel across epochs when workers exist."""
 function analyze_checkpoints(run_path; mode, workers = nothing)
     epochs = _checkpoint_epochs(run_path)
     isempty(epochs) && throw(ArgumentError("no checkpoints found in $run_path"))
 
+    analyze_epoch = epoch -> _analyze_checkpoint(run_path, epoch, mode)
+    results = workers === nothing ? map(analyze_epoch, epochs) :
+        Distributed.pmap(analyze_epoch, workers, epochs)
+    sort!(results; by = result -> result.epoch)
+
     monomial_data = Dict{String, Any}(
-        "epoch" => Int[],
-        "step" => Int[],
-        "pre" => Int[],
-        "post" => Int[],
+        "epoch" => [result.epoch for result in results],
+        "step" => [result.step for result in results],
+        "pre" => [result.pre for result in results],
+        "post" => [result.post for result in results],
     )
     checkpoint_data = Dict{String, Any}(
-        "epoch" => Int[],
-        "step" => Int[],
-        "hoffman_constant" => Float64[],
+        "epoch" => [result.epoch for result in results],
+        "step" => [result.step for result in results],
+        "hoffman_constant" => [result.hoffman_constant for result in results],
         "hoffman_algorithm" => "brute_force",
         "hoffman_norm" => "infinity",
         "hoffman_representation" => "pruned_rational_signomial",
         "hoffman_evaluation" => "floating_point_lp_and_rank_tests",
     )
-    for epoch in epochs
-        println("  analyzing epoch $epoch")
-        checkpoint_path = _checkpoint_path(run_path, epoch)
-        parameters = JLD2.load(joinpath(checkpoint_path, "parameters.jld2"))
-        Int(parameters["epoch"]) == epoch || throw(ArgumentError(
-            "checkpoint directory $epoch contains parameters for epoch " *
-            string(parameters["epoch"]),
-        ))
-        step = Int(parameters["step"])
-        weights = parameters["weights"]
-        biases = parameters["biases"]
-        thresholds = [zeros(Rational{BigInt}, length(bias)) for bias in biases[1:(end - 1)]]
-
-        pre_pruning = tropicalize(weights, biases, thresholds)[1]
-        post_pruning = TropicalNN.prune(pre_pruning; mode = mode, workers = workers)
-        regions = TropicalNN.map_statistic(identity, post_pruning; mode = mode)
-        graph = TropicalNN.get_graph(regions)
-        polyhedral_data = _polyhedral_data(regions)
-        edge_data = Dict(
-            "directions" => TropicalNN._edge_directions(graph)["full"],
-            "lengths" => TropicalNN._edge_lengths(graph)["full"],
-        )
-
-        JLD2.jldsave(joinpath(checkpoint_path, "graph.jld2"); graph)
-        JLD2.jldsave(joinpath(checkpoint_path, "edge_data.jld2"); edge_data)
-        JLD2.jldsave(joinpath(checkpoint_path, "polyhedral_data.jld2"); polyhedral_data)
-        push!(monomial_data["epoch"], epoch)
-        push!(monomial_data["step"], step)
-        push!(monomial_data["pre"], monomial_count(pre_pruning))
-        push!(monomial_data["post"], monomial_count(post_pruning))
-        # With two input variables, exhaustive row-subset enumeration is small.
-        # The function-level API retains only full-dimensional dominance cells.
-        hoffman = hoffman_constant(post_pruning; brute_force = true, mode = mode)
-        push!(checkpoint_data["epoch"], epoch)
-        push!(checkpoint_data["step"], step)
-        push!(checkpoint_data["hoffman_constant"], Float64(hoffman))
-        # Release GLPK models before beginning the next checkpoint's Oscar work.
-        GC.gc()
-    end
     JLD2.jldsave(joinpath(run_path, "monomial_data.jld2"); monomial_data)
     JLD2.jldsave(joinpath(run_path, "checkpoint_data.jld2"); checkpoint_data)
     return monomial_data
 end
-
 _expected_checkpoint_epochs(config::ExperimentConfig) = collect(0:config.epochs)
 
 function _prepare_run_directory(run_path)

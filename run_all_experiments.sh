@@ -25,7 +25,7 @@ run_from_root() {
     local script="$1"
     shift
     echo "==> $script"
-    (cd "$ROOT" && "$JULIA" +1.12.5 --project="$ROOT" "$script" "$@")
+    (cd "$ROOT" && "$JULIA" --project="$ROOT" "$script" "$@")
 }
 
 run_in_dir() {
@@ -33,7 +33,7 @@ run_in_dir() {
     local script="$2"
     shift 2
     echo "==> $dir/$script"
-    (cd "$ROOT/$dir" && "$JULIA" +1.12.5 --project="$ROOT" "$script" "$@")
+    (cd "$ROOT/$dir" && "$JULIA" --project="$ROOT" "$script" "$@")
 }
 
 write_metadata
@@ -41,15 +41,20 @@ run_from_root "run_manifest.jl" \
     "$ROOT/outputs/run_manifest.toml" \
     "$0" "${EXPERIMENT_ARGS[@]}"
 
-run_in_dir "visualize_linear_regions" "main.jl" "${EXPERIMENT_ARGS[@]}"
-run_in_dir "effective_radius" "main.jl" "${EXPERIMENT_ARGS[@]}"
-run_in_dir "effective_radius" "hoffman_tables.jl" "${EXPERIMENT_ARGS[@]}"
+# run_in_dir "visualize_linear_regions" "main.jl" "${EXPERIMENT_ARGS[@]}"
+# run_in_dir "effective_radius" "main.jl" "${EXPERIMENT_ARGS[@]}"
+# run_in_dir "effective_radius" "hoffman_tables.jl" "${EXPERIMENT_ARGS[@]}"
 
 run_from_root "width_depth/main.jl" "${EXPERIMENT_ARGS[@]}"
 run_from_root "width_depth/linear_regions.jl" "${EXPERIMENT_ARGS[@]}"
-run_from_root "rate_of_pruning/main.jl" "${EXPERIMENT_ARGS[@]}"
-run_from_root "random_rational_regions/main.jl" "${EXPERIMENT_ARGS[@]}"
+# run_from_root "rate_of_pruning/main.jl" "${EXPERIMENT_ARGS[@]}"
+# run_from_root "random_rational_regions/main.jl" "${EXPERIMENT_ARGS[@]}"
 
+if [[ -z "${VOLUME_OUTPUT_DIR:-}" ]]; then
+    volume_dataset="${VOLUME_DATASET:-spiral}"
+    VOLUME_OUTPUT_DIR="$ROOT/outputs/volume_dynamics/${volume_dataset}_$(date -u +"%Y%m%dT%H%M%SZ")"
+fi
+export VOLUME_OUTPUT_DIR
 run_from_root "volume_dynamics/main.jl" "${EXPERIMENT_ARGS[@]}"
 run_from_root "volume_dynamics/analyse.jl"
 

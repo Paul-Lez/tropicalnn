@@ -43,19 +43,23 @@ function _configure_highs_environment!(threads::Int)
 end
 
 function _configure_worker_environment!(worker_ids, threads::Int)
-    for pid in worker_ids
-        remotecall_wait(pid, threads) do worker_threads
+    futures = map(worker_ids) do pid
+        remotecall(pid, threads) do worker_threads
             ENV["OMP_NUM_THREADS"] = string(worker_threads)
         end
     end
+    fetch.(futures)
+    return nothing
 end
 
 function _load_tropicalnn_on_workers!(worker_ids)
-    for pid in worker_ids
-        remotecall_wait(pid) do
+    futures = map(worker_ids) do pid
+        remotecall(pid) do
             Base.eval(Main, :(using TropicalNN))
         end
     end
+    fetch.(futures)
+    return nothing
 end
 
 function setup_experiment!(;
